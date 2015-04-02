@@ -1,0 +1,110 @@
+#!/usr/bin/env python
+# **********************************************************************
+#
+# Copyright (c) 2015-2015 ZeroC, Inc. All rights reserved.
+#
+# **********************************************************************
+
+import os, subprocess
+
+from CertificateUtils import Certificate, CertificateFactory, b, read
+
+class KeyToolCertificate(Certificate):
+    def __init__(self, parent, dn, alias):
+        Certificate.__init__(self, parent, dn, alias)
+        self.jks = os.path.join(self.parent.home, alias + ".jks")
+
+    def exists(self):
+        return os.path.exists(self.jks)
+
+    def toText(self):
+        return self.parent.keyTool("printcert", "-v", stdin = self.keyTool("exportcert"))
+
+    def saveJKS(self, path, password = "password", type = None, provider = None):
+        self.exportToKeyStore(path, password, type, provider, self.jks)
+        return self
+
+    def savePKCS12(self, path, password = "password", chain=True):
+        self.exportToKeyStore(path, password, "PKCS12", src=self.jks)
+        return self
+
+    def savePEM(self, path):
+        self.keyTool("exportcert", "-rfc", file=path)
+        return self
+
+    def saveDER(self, path):
+        self.keyTool("exportcert", file=path)
+        return self
+
+    def keyTool(self, *args, **kargs):
+        return self.parent.keyTool(cert=self, *args, **kargs)
+
+class KeyToolCertificateFactory(CertificateFactory):
+    def __init__(self, *args, **kargs):
+        CertificateFactory.__init__(self, *args, **kargs)
+
+        # Transform key/signature algorithm to suitable values for keytool
+        self.keyalg = self.keyalg.upper()
+        self.sigalg = self.sigalg.upper() + "with" + self.keyalg;
+
+        # Create the CA self-signed certificate
+        self.cacert = KeyToolCertificate(self, self.dn, "ca")
+        if not self.cacert.exists():
+            self.cacert.keyTool("genkeypair", ext="bc:c", validity=self.validity, sigalg=self.sigalg)
+        self.cacert.generatePEM()
+
+    def create(self, alias, dn=None, ip=None, dns=None):
+
+        if alias in self.certs:
+            return self.certs[alias]
+
+        cert = KeyToolCertificate(self, dn or ip or alias, alias)
+        if cert.exists():
+            self.certs[alias] = cert
+            return cert
+
+        subAltName = None
+        if ip and dns:
+            subAltName = "san=DNS:{dns},IP:{ip}".format(ip=ip, dns=dns)
+        elif ip:
+            subAltName = "san=IP:{ip}".format(ip=ip)
+        elif dns:
+            subAltName = "san=DNS:{dns}".format(dns=dns)
+
+        # Generate a certificate/key pair
+        cert.keyTool("genkeypair")
+
+        # Create a certificate signing request
+        req = cert.keyTool("certreq")
+
+        # Sign the certificate with the CA
+        pem = cert.keyTool("gencert", stdin=req, ext=subAltName)
+
+        # Concatenate the CA and signed certificate and re-import it into the keystore
+        chain = read(self.cacert.pem) + pem
+        cert.keyTool("importcert", stdin=chain)
+
+        self.certs[alias] = cert
+        return cert
+
+    def keyTool(self, cmd, *args, **kargs):
+        command = "keytool -noprompt -{cmd}".format(cmd = cmd)
+
+        # Consume cert argument
+        cert = kargs.get("cert", None)
+        if cert: del kargs["cert"]
+
+        # Setup -keystore, -storepass and -alias arguments
+        if cmd in ["genkeypair", "exportcert", "certreq", "importcert"]:
+            command += " -alias {cert.alias} -keystore {cert.jks} -storepass:file {this.passpath}"
+        elif cmd in ["gencert"]:
+            command += " -alias {cacert.alias} -keystore {cacert.jks} -storepass:file {this.passpath}"
+        if cmd == "genkeypair":
+            command += " -keypass:file {this.passpath} -keyalg {this.keyalg} -keysize {this.keysize} -dname \"{cert.dn}\""
+        elif cmd == "certreq":
+            command += " -sigalg {this.sigalg}"
+        elif cmd == "gencert":
+            command += " -validity {this.validity} -ext ku:c=dig,keyEnc -rfc"
+
+        command = command.format(cert = cert, cacert = self.cacert, this = self)
+        return self.run(command, *args, **kargs)
