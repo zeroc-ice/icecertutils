@@ -5,20 +5,25 @@
 #
 # **********************************************************************
 
-import os, subprocess
+import os, subprocess, glob
 
-from CertificateUtils import Certificate, CertificateFactory, b, read
+from IceCertUtils.CertificateUtils import DistinguishedName, Certificate, CertificateFactory, b, d, read
 
 class KeyToolCertificate(Certificate):
-    def __init__(self, parent, dn, alias):
-        Certificate.__init__(self, parent, dn, alias)
-        self.jks = os.path.join(self.parent.home, alias + ".jks")
+    def __init__(self, *args):
+        Certificate.__init__(self, *args)
+        self.jks = os.path.join(self.parent.home, self.alias + ".jks")
 
     def exists(self):
         return os.path.exists(self.jks)
 
+    def load(self):
+        subject = self.toText()
+        self.dn = DistinguishedName.parse(subject[subject.find(":") + 1:subject.find("\n")].strip())
+        return self
+
     def toText(self):
-        return self.parent.keyTool("printcert", "-v", stdin = self.keyTool("exportcert"))
+        return d(self.parent.keyTool("printcert", "-v", stdin = self.keyTool("exportcert")))
 
     def saveJKS(self, path, password = "password", type = None, provider = None):
         self.exportToKeyStore(path, password, type, provider, self.jks)
@@ -48,21 +53,19 @@ class KeyToolCertificateFactory(CertificateFactory):
         self.sigalg = self.sigalg.upper() + "with" + self.keyalg;
 
         # Create the CA self-signed certificate
-        self.cacert = KeyToolCertificate(self, self.dn, "ca")
-        if not self.cacert.exists():
+        self.cacert = self.get("ca")
+        if not self.cacert:
+            self.cacert = KeyToolCertificate(self, "ca", self.dn)
+            self.certs["ca"] = self.cacert
             self.cacert.keyTool("genkeypair", ext="bc:c", validity=self.validity, sigalg=self.sigalg)
-        self.cacert.generatePEM()
+            self.cacert.generatePEM()
 
-    def create(self, alias, dn=None, ip=None, dns=None):
+        self.dn = self.cacert.dn
 
-        if alias in self.certs:
-            return self.certs[alias]
+    def _createChild(self, *args):
+        return KeyToolCertificate(self, *args)
 
-        cert = KeyToolCertificate(self, dn or ip or alias, alias)
-        if cert.exists():
-            self.certs[alias] = cert
-            return cert
-
+    def _generateChild(self, alias, dn=None, ip=None, dns=None):
         subAltName = None
         if ip and dns:
             subAltName = "san=DNS:{dns},IP:{ip}".format(ip=ip, dns=dns)
@@ -70,6 +73,8 @@ class KeyToolCertificateFactory(CertificateFactory):
             subAltName = "san=IP:{ip}".format(ip=ip)
         elif dns:
             subAltName = "san=DNS:{dns}".format(dns=dns)
+
+        cert = KeyToolCertificate(self, alias, dn or ip or alias)
 
         # Generate a certificate/key pair
         cert.keyTool("genkeypair")
@@ -81,11 +86,13 @@ class KeyToolCertificateFactory(CertificateFactory):
         pem = cert.keyTool("gencert", stdin=req, ext=subAltName)
 
         # Concatenate the CA and signed certificate and re-import it into the keystore
-        chain = read(self.cacert.pem) + pem
+        chain = d(read(self.cacert.pem)) + d(pem)
         cert.keyTool("importcert", stdin=chain)
 
-        self.certs[alias] = cert
         return cert
+
+    def list(self):
+        return [os.path.splitext(os.path.basename(a))[0] for a in glob.glob(os.path.join(self.home, "*.jks"))]
 
     def keyTool(self, cmd, *args, **kargs):
         command = "keytool -noprompt -{cmd}".format(cmd = cmd)

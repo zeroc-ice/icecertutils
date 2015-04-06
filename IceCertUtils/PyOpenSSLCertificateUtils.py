@@ -8,9 +8,9 @@
 #
 # **********************************************************************
 
-import os, random, tempfile
+import os, random, tempfile, glob, datetime
 
-from CertificateUtils import DistinguishedName, Certificate, CertificateFactory, b, read, write
+from IceCertUtils.CertificateUtils import DistinguishedName, Certificate, CertificateFactory, b, d, read, write
 from OpenSSL import crypto
 
 def setSubject(dn, subj):
@@ -21,63 +21,92 @@ def setSubject(dn, subj):
                 setattr(subj, k, v)
 
 class PyOpenSSLCertificate(Certificate):
-    def __init__(self, parent, dn, alias):
-        Certificate.__init__(self, parent, dn, alias)
-        self.key = None
+    def __init__(self, *args):
+        Certificate.__init__(self, *args)
+        self.pem = os.path.join(self.parent.home, self.alias + ".pem")
+        self.key = os.path.join(self.parent.home, self.alias + "_key.pem")
+        self.pkey = None
         self.x509 = None
 
     def exists(self):
-        return os.path.exists(os.path.join(self.parent.home, self.alias + ".p12"))
+        return os.path.exists(self.pem)
 
-    def init(self, key, x509):
-        self.key = key
+    def init(self, pkey, x509):
+        self.pkey = pkey
         self.x509 = x509
-        if not self.parent.rmHome:
-            # Persist a PKCS12 file if not temporary home
-            self.generatePKCS12()
+        self.generateKEY()
+        self.generatePEM()
         return self
 
     def load(self):
-        self.p12 = os.path.join(self.parent.home, self.alias + ".p12")
-        p12 = crypto.load_pkcs12(read(self.p12), self.parent.password)
-        self.x509 = p12.get_certificate()
-        self.key = p12.get_privatekey()
-        return self
+        cert = crypto.load_certificate(crypto.FILETYPE_PEM, read(self.pem))
+        key = crypto.load_privatekey(crypto.FILETYPE_PEM, read(self.key), b(self.parent.password))
+        subject = cert.get_subject()
+        self.dn = DistinguishedName(subject.commonName,
+                                    subject.organizationalUnitName,
+                                    subject.organizationName,
+                                    subject.localityName,
+                                    subject.stateOrProvinceName,
+                                    subject.countryName,
+                                    subject.emailAddress)
+        return self.init(key, cert)
 
     def toText(self):
-        return crypto.dump_certificate(crypto.FILETYPE_PEM, self.x509)
+        s = """Version: %s
+Serial Number: %s
+Signature Algorithm: %s
+Issuer: %s
+Validity:
+   Not before: %s
+   Not after: %s
+Subject: %s
+X509v3 extensions:""" % (self.x509.get_version() + 1,
+                         self.x509.get_serial_number(),
+                         self.x509.get_signature_algorithm(),
+                         str(self.x509.get_issuer()).replace("<X509Name object '", "").replace("'>", ""),
+                         datetime.datetime.strptime(d(self.x509.get_notBefore()), "%Y%m%d%H%M%SZ"),
+                         datetime.datetime.strptime(d(self.x509.get_notAfter()), "%Y%m%d%H%M%SZ"),
+                         str(self.x509.get_subject()).replace("<X509Name object '", "").replace("'>", ""))
+        for i in range(0, self.x509.get_extension_count()):
+            ext = self.x509.get_extension(i)
+            s += "\n    " + d(ext.get_short_name()).strip() + ":\n        " + str(ext).replace("\n", "\n        ")
+        return s
 
     def savePKCS12(self, path, password="password", chain=True):
         p12 = crypto.PKCS12()
         p12.set_certificate(self.x509)
         p12.set_friendlyname(b(self.alias))
-
         if self.parent.cacert != self:
-            p12.set_privatekey(self.key)
+            p12.set_privatekey(self.pkey)
             if chain:
                 p12.set_ca_certificates([self.parent.cacert.x509])
-
         write(path, p12.export(b(password)))
         return self
 
     def savePEM(self, path):
-        with open(path, 'wb') as f: f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, self.x509))
+        write(path, crypto.dump_certificate(crypto.FILETYPE_PEM, self.x509))
         return self
 
     def saveDER(self, path):
-        with open(path, 'wb') as f: f.write(crypto.dump_certificate(crypto.FILETYPE_ASN1, self.x509))
+        write(path, crypto.dump_certificate(crypto.FILETYPE_ASN1, self.x509))
         return self
+
+    def generateKEY(self):
+        if not os.path.exists(self.key):
+            write(self.key, crypto.dump_privatekey(crypto.FILETYPE_PEM, self.pkey, self.parent.cipher,
+                                                   b(self.parent.password)))
 
 class PyOpenSSLCertificateFactory(CertificateFactory):
     def __init__(self, *args, **kargs):
         CertificateFactory.__init__(self, *args, **kargs)
 
         self.keyalg = crypto.TYPE_RSA if self.keyalg == "rsa" else crypto.TYPE_DSA
+        self.cipher = "DES-EDE3-CBC" # Cipher used to encode the private key
 
-        self.cacert = PyOpenSSLCertificate(self, self.dn, "ca")
-        if self.cacert.exists():
-            self.cacert.load()
-        else:
+        self.cacert = self.get("ca")
+        if not self.cacert:
+            self.cacert = PyOpenSSLCertificate(self, "ca", self.dn)
+
             # Generate the CA certificate
             key = crypto.PKey()
             key.generate_key(self.keyalg, self.keysize)
@@ -103,17 +132,14 @@ class PyOpenSSLCertificateFactory(CertificateFactory):
             x509.sign(key, self.sigalg)
 
             self.cacert.init(key, x509)
-            self.cacert.generatePEM()
+            self.certs["ca"] = self.cacert
 
-    def create(self, alias, dn=None, ip=None, dns=None):
+        self.dn = self.cacert.dn
 
-        if alias in self.certs:
-            return self.certs[alias]
+    def _createChild(self, *args):
+        return PyOpenSSLCertificate(self, *args)
 
-        cert = PyOpenSSLCertificate(self, dn or ip or alias, alias)
-        if cert.exists():
-            self.certs[alias] = cert.load()
-            return cert
+    def _generateChild(self, alias, dn=None, ip=None, dns=None):
 
         subAltName = None
         if ip and dns:
@@ -122,6 +148,8 @@ class PyOpenSSLCertificateFactory(CertificateFactory):
             subAltName = "IP: {ip}"
         elif dns:
             subAltName = "DNS: {dns}"
+
+        cert = PyOpenSSLCertificate(self, alias, dn or ip or alias)
 
         key = crypto.PKey()
         key.generate_key(self.keyalg, self.keysize)
@@ -151,7 +179,9 @@ class PyOpenSSLCertificateFactory(CertificateFactory):
             extensions.append(crypto.X509Extension(b('subjectAltName'), False, b(subAltName.format(dns=dns,ip=ip))))
         x509.add_extensions(extensions)
 
-        x509.sign(self.cacert.key, self.sigalg)
+        x509.sign(self.cacert.pkey, self.sigalg)
 
-        self.certs[alias] = cert.init(key, x509)
-        return cert
+        return cert.init(key, x509)
+
+    def list(self):
+        return [os.path.basename(a).replace("_key.pem","") for a in glob.glob(os.path.join(self.home, "*_key.pem"))]

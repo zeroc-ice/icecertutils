@@ -54,16 +54,19 @@ class TestFactory(unittest.TestCase):
 
         f = vars(IceCertUtils)[self.factory](home = self.home, dn = IceCertUtils.DistinguishedName(self.cn),
                                              password="testpass")
-        self.assertEquals(str(f), "CN=" + self.cn)
+        self.assertEqual(str(f), "CN=" + self.cn)
         b = f.create("test")
-        self.assertEquals(str(b), "CN=test")
+        self.assertEqual(str(b), "CN=test")
         f.destroy()
 
-        f = vars(IceCertUtils)[self.factory](home = self.home, dn = IceCertUtils.DistinguishedName(self.cn))
-        a = f.create("test")
-        self.assertEquals(str(a), "CN=test")
+        f = vars(IceCertUtils)[self.factory](home = self.home, password="testpass")
+        a = f.get("test")
+        certs = f.list()
+        self.assertTrue("ca" in certs)
+        self.assertTrue("test" in certs)
+        self.assertEqual(str(a), "CN=test")
 
-        self.assertEquals(b.toText(), a.toText())
+        self.assertEqual(b.toText(), a.toText())
 
         f.destroy(force=True)
 

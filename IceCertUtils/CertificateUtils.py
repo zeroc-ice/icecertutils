@@ -5,7 +5,7 @@
 #
 # **********************************************************************
 
-import sys, os, shutil, subprocess, tempfile, random
+import sys, os, shutil, subprocess, tempfile, random, re, atexit
 
 try:
     from subprocess import DEVNULL
@@ -14,6 +14,9 @@ except ImportError:
 
 def b(s):
     return s if sys.version_info[0] == 2 else s.encode("utf-8") if isinstance(s, str) else s
+
+def d(s):
+    return s if sys.version_info[0] == 2 else s.decode("utf-8") if isinstance(s, bytes) else s
 
 def read(p):
     with open(p, "r") as f: return f.read()
@@ -59,15 +62,17 @@ try:
 except:
     pass
 
+SPLIT_PATTERN = re.compile(r'''((?:[^,"']|"[^"]*"|'[^']*')+)''')
+
 class DistinguishedName:
 
-    def __init__(self, cn, ou = None, o = None, l = None, st = None, c = None, emailAddress=None, default = None):
-        self.CN = cn
-        self.OU = ou or (default.OU if default else "")
-        self.O = o or (default.O if default else "")
-        self.L = l or (default.L if default else "")
-        self.ST = st or (default.ST if default else "")
-        self.C = c or (default.C if default else "")
+    def __init__(self, CN, OU = None, O = None, L = None, ST = None, C = None, emailAddress=None, default = None):
+        self.CN = CN
+        self.OU = OU or (default.OU if default else "")
+        self.O = O or (default.O if default else "")
+        self.L = L or (default.L if default else "")
+        self.ST = ST or (default.ST if default else "")
+        self.C = C or (default.C if default else "")
         self.emailAddress = emailAddress or (default.emailAddress if default else "")
 
     def __str__(self):
@@ -83,8 +88,23 @@ class DistinguishedName:
                     s += "{sep}{k}={v}".format(k = k, v = v, sep = "" if s == "" else sep)
         return s
 
+    @staticmethod
+    def parse(str):
+        args = {}
+        for m in SPLIT_PATTERN.split(str)[1::2]:
+            p = m.find("=")
+            if p != -1:
+                v = m[p+1:].strip()
+                if v.startswith('"') and v.endswith('"'):
+                    v = v[1:-1]
+                args[m[0:p].strip().upper()] = v
+        if "EMAILADDRESS" in args:
+            args["emailAddress"] = args["EMAILADDRESS"]
+            del args["EMAILADDRESS"]
+        return DistinguishedName(**args)
+
 class Certificate:
-    def __init__(self, parent, dn, alias):
+    def __init__(self, parent, alias, dn = None):
         self.parent = parent
         self.dn = dn if isinstance(dn, DistinguishedName) else DistinguishedName(dn, default=self.parent.dn)
         self.alias = alias
@@ -122,7 +142,7 @@ class Certificate:
             return self.saveJKS(path, *args, **kargs)
         elif ext == ".bks":
             return self.saveBKS(path, *args, **kargs)
-        elif ext == ".der":
+        elif ext in [".der", ".cer", ".crt"]:
             return self.saveDER(path)
         else:
             return self.savePEM(path)
@@ -200,7 +220,7 @@ defaultDN = DistinguishedName("ZeroC IceCertUtils CA", "Ice", "ZeroC, Inc.", "Ju
 
 class CertificateFactory:
     def __init__(self, home=None, debug=None, dn=None, validity=1825, keysize=2048, keyalg="rsa", sigalg="sha256",
-                 password = None):
+                 password = "password"):
 
         # Certificate generate parameters
         self.validity = validity
@@ -218,23 +238,46 @@ class CertificateFactory:
         self.certs = {}
 
         # The password used to protect keys and key stores from the factory home directory
-        self.passpath = os.path.join(self.home, "password")
-        if not os.path.exists(self.passpath):
-            self.password = password or str(random.getrandbits(128))
-            with open(self.passpath, "w") as f: f.write(b(self.password))
-        else:
-            with open(self.passpath, "r") as f: self.password = f.read()
+        self.password = password
+        (f, self.passpath) = tempfile.mkstemp()
+        os.write(f, b(self.password))
+        os.close(f)
+
+        @atexit.register
+        def rmpass():
+            if os.path.exists(self.passpath):
+                os.remove(self.passpath)
 
         self.debug = debug
         if self.debug:
             print("[debug] using %s implementation" % self.__class__.__name__)
 
     def __str__(self):
-        return str(self.cacert or self.dn)
+        return str(self.cacert)
+
+    def create(self, alias, *args, **kargs):
+        cert = self.get(alias)
+        if cert:
+            cert.destroy() # Remove previous certificate
+        cert = self._generateChild(alias, *args, **kargs)
+        self.certs[alias] = cert
+        return cert
+
+    def get(self, alias):
+        if alias in self.certs:
+            return self.certs[alias]
+        cert = self._createChild(alias)
+        if cert.exists():
+            self.certs[alias] = cert.load()
+            return cert
+
+        return None
 
     def destroy(self, force=False):
         if self.rmHome or force:
             # Cleanup temporary directory
+            if os.path.exists(self.passpath):
+                os.remove(self.passpath)
             if self.cacert:
                 self.cacert.destroy()
             for (a,c) in self.certs.items():
@@ -271,7 +314,7 @@ class CertificateFactory:
 
         stdout, stderr = p.communicate(b(stdin))
         if p.wait() != 0:
-            raise Exception("command failed: " + cmd + "\n" + (stderr or stdout))
+            raise Exception("command failed: " + cmd + "\n" + d(stderr or stdout))
 
         return stdout
 

@@ -4,9 +4,9 @@
 #
 # **********************************************************************
 
-from PyOpenSSLCertificateUtils import PyOpenSSLCertificateFactory
-from OpenSSLCertificateUtils import OpenSSLCertificateFactory
-from KeyToolCertificateUtils import KeyToolCertificateFactory
-from CertificateUtils import DistinguishedName, Certificate
+from IceCertUtils.PyOpenSSLCertificateUtils import PyOpenSSLCertificateFactory
+from IceCertUtils.OpenSSLCertificateUtils import OpenSSLCertificateFactory
+from IceCertUtils.KeyToolCertificateUtils import KeyToolCertificateFactory
+from IceCertUtils.CertificateUtils import DistinguishedName, Certificate
 
 CertificateFactory = CertificateUtils.getDefaultImplementation()
