@@ -74,7 +74,7 @@ class KeyToolCertificateFactory(CertificateFactory):
         elif dns:
             subAltName = "san=DNS:{dns}".format(dns=dns)
 
-        cert = KeyToolCertificate(self, alias, dn or ip or alias)
+        cert = KeyToolCertificate(self, alias, dn or ip or dns or alias)
 
         # Generate a certificate/key pair
         cert.keyTool("genkeypair")

@@ -105,7 +105,7 @@ class OpenSSLCertificateFactory(CertificateFactory):
         elif dns:
             subAltName = "subjectAltName = DNS: {dns}"
 
-        cert = OpenSSLCertificate(self, alias, dn or ip or alias)
+        cert = OpenSSLCertificate(self, alias, dn or ip or dns or alias)
 
         # Generate a certificate request
         req = cert.openSSL("req", config=

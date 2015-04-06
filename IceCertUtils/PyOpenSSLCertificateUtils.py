@@ -149,7 +149,7 @@ class PyOpenSSLCertificateFactory(CertificateFactory):
         elif dns:
             subAltName = "DNS: {dns}"
 
-        cert = PyOpenSSLCertificate(self, alias, dn or ip or alias)
+        cert = PyOpenSSLCertificate(self, alias, dn or ip or dns or alias)
 
         key = crypto.PKey()
         key.generate_key(self.keyalg, self.keysize)
