@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # **********************************************************************
 #
-# Copyright (c) 2015-2015 ZeroC, Inc. All rights reserved.
+# Copyright (c) 2015 ZeroC, Inc. All rights reserved.
 #
 # **********************************************************************
 
@@ -29,7 +29,6 @@ def write(p, data):
 #
 keytoolSupport = True
 if subprocess.call("keytool", shell=True, stdout=DEVNULL, stderr=DEVNULL) != 0:
-    print("warning: couldn't find Java keytool, Java certificates won't be created")
     keytoolSupport = False
 
 #
@@ -40,10 +39,8 @@ if keytoolSupport:
     bksProvider = "org.bouncycastle.jce.provider.BouncyCastleProvider"
     p = subprocess.Popen("javap " + bksProvider, shell=True, stdout=DEVNULL, stderr=subprocess.PIPE)
     stdout, stderr = p.communicate()
-    if p.wait() != 0 or stderr.find("Error:") >= 0:
-        print("warning: couldn't find Bouncy Castle provider, Android certificates won't be created")
-    else:
-        bksSupport = True
+    if p.wait() == 0 and stderr.find("Error:") == -1:
+        bksSupport = False
 
 #
 # Check if OpenSSL is available
@@ -144,25 +141,29 @@ class Certificate:
             return self.saveBKS(path, *args, **kargs)
         elif ext in [".der", ".cer", ".crt"]:
             return self.saveDER(path)
-        else:
+        elif ext == ".pem":
             return self.savePEM(path)
+        else:
+            raise RuntimeError("unknown certificate extension `{0}'".format(ext))
 
     def savePKCS12(self, path):
-        raise "not supported"
+        raise NotImplementedError("savePKCS12")
 
     def savePEM(self, path):
-        raise "not supported"
+        raise NotImplementedError("savePEM")
 
     def saveDER(self, path):
-        raise "not supported"
+        raise NotImplementedError("saveDER")
 
     def saveJKS(self, path, password="password", type="JKS", provider=None):
         self.exportToKeyStore(path, password, type, provider)
         return self
 
     def saveBKS(self, path, password="password"):
-        if bksSupport:
-            self.saveJKS(path, password, "BKS", bksProvider)
+        if not bksSupport:
+            raise RuntimeError("No BouncyCastle support, you need to install the BouncyCastleProvider with your JDK")
+
+        self.saveJKS(path, password, "BKS", bksProvider)
         return self
 
     def destroy(self):
@@ -172,7 +173,7 @@ class Certificate:
 
     def exportToKeyStore(self, dest, password, type = None, provider = None, src = None):
         if not keytoolSupport:
-            return
+            raise RuntimeError("No keytool support, add keytool from your JDK bin directory to your PATH")
 
         def getType(path):
             (_, ext) = os.path.splitext(path)

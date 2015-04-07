@@ -1,20 +1,12 @@
 #!/usr/bin/env python
 # **********************************************************************
 #
-# Copyright (c) 2015-2015 ZeroC, Inc. All rights reserved.
+# Copyright (c) 2015 ZeroC, Inc. All rights reserved.
 #
 # **********************************************************************
 
 import sys, os, shutil, unittest
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-
-def test(c):
-    if not c:
-        raise Exception("test failed")
-
-def testEq(l, r):
-    if l != r:
-        raise Exception("test failed: {l} != {r}".format(l=l, r=r))
 
 import IceCertUtils
 keytoolSupport = IceCertUtils.CertificateUtils.bksSupport
