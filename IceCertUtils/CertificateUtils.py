@@ -40,7 +40,7 @@ if keytoolSupport:
     p = subprocess.Popen("javap " + bksProvider, shell=True, stdout=DEVNULL, stderr=subprocess.PIPE)
     stdout, stderr = p.communicate()
     if p.wait() == 0 and stderr.find("Error:") == -1:
-        bksSupport = False
+        bksSupport = True
 
 #
 # Check if OpenSSL is available
