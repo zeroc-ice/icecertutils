@@ -146,6 +146,9 @@ class Certificate:
         else:
             raise RuntimeError("unknown certificate extension `{0}'".format(ext))
 
+    def saveKey(self, path):
+        raise NotImplementedError("saveKey")
+
     def savePKCS12(self, path):
         raise NotImplementedError("savePKCS12")
 
@@ -273,6 +276,9 @@ class CertificateFactory:
             return cert
 
         return None
+
+    def getCA(self):
+        return self.cacert
 
     def destroy(self, force=False):
         if self.rmHome or force:

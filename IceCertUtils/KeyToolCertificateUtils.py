@@ -7,7 +7,7 @@
 
 import os, subprocess, glob
 
-from IceCertUtils.CertificateUtils import DistinguishedName, Certificate, CertificateFactory, b, d, read
+from IceCertUtils.CertificateUtils import DistinguishedName, Certificate, CertificateFactory, b, d, read, opensslSupport
 
 class KeyToolCertificate(Certificate):
     def __init__(self, *args):
@@ -24,6 +24,14 @@ class KeyToolCertificate(Certificate):
 
     def toText(self):
         return d(self.parent.keyTool("printcert", "-v", stdin = self.keyTool("exportcert")))
+
+    def saveKey(self, path):
+        if not opensslSupport:
+            raise RuntimeError("No openssl support, add opensll to your PATH to export private keys")
+
+        self.generatePKCS12()
+        return self.parent.run("openssl", "pkcs12", "-nodes", "-in " + self.p12,
+                               "-passin file:" + self.parent.passpath, out=path)
 
     def saveJKS(self, path, password = "password", type = None, provider = None):
         self.exportToKeyStore(path, password, type, provider, self.jks)

@@ -42,6 +42,10 @@ class OpenSSLCertificate(Certificate):
     def toText(self):
         return d(self.openSSL("x509", "-noout", "-text"))
 
+    def saveKey(self, path):
+        self.openSSL("rsa", outform="PEM", out=path)
+        return self
+
     def savePKCS12(self, path, password="password", chain=True):
         if self == self.parent.cacert:
             # If saving CA cert, just save the certificate without the key
@@ -193,6 +197,8 @@ class OpenSSLCertificateFactory(CertificateFactory):
         #
         if cmd == "x509" and not "-req" in args:
             command += " -in {cert.pem}"
+        elif cmd == "rsa":
+            command += " -in {cert.key} -passin file:{this.passpath}"
         elif cmd == "pkcs12":
             command += " -in {cert.pem} -name {cert.alias} -export -passin file:{this.passpath} -passout file:{passpath}"
 

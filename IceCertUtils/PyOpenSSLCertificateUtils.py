@@ -69,6 +69,9 @@ X509v3 extensions:""" % (self.x509.get_version() + 1,
             s += "\n    " + d(ext.get_short_name()).strip() + ":\n        " + str(ext).replace("\n", "\n        ")
         return s
 
+    def saveKey(self, path):
+        write(path, crypto.dump_privatekey(crypto.FILETYPE_PEM, self.pkey))
+
     def savePKCS12(self, path, password="password", chain=True):
         p12 = crypto.PKCS12()
         p12.set_certificate(self.x509)
