@@ -63,7 +63,7 @@ SPLIT_PATTERN = re.compile(r'''((?:[^,"']|"[^"]*"|'[^']*')+)''')
 
 class DistinguishedName:
 
-    def __init__(self, CN, OU = None, O = None, L = None, ST = None, C = None, emailAddress=None, default = None):
+    def __init__(self, CN, OU = None, O = None, L = None, ST = None, C = None, emailAddress = None, default = None):
         self.CN = CN
         self.OU = OU or (default.OU if default else "")
         self.O = O or (default.O if default else "")
@@ -220,7 +220,8 @@ class Certificate:
         finally:
             os.remove(passpath)
 
-defaultDN = DistinguishedName("ZeroC IceCertUtils CA", "Ice", "ZeroC, Inc.", "Jupiter", "Florida", "US")
+defaultDN = DistinguishedName("ZeroC IceCertUtils CA", "Ice", "ZeroC, Inc.", "Jupiter", "Florida", "US",
+                              emailAddress="info@zeroc.com")
 
 class CertificateFactory:
     def __init__(self, home=None, debug=None, dn=None, validity=1825, keysize=2048, keyalg="rsa", sigalg="sha256",
