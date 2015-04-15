@@ -13,7 +13,7 @@ import sys
 setup(
   name = 'zeroc-ice-certutils',
   packages = ['IceCertUtils'],
-  version = '1.0b5',
+  version = '1.0b6',
   description = 'ZeroC Ice Certificate Utilities',
   author = 'ZeroC, Inc.',
   author_email = 'info@zeroc.com',

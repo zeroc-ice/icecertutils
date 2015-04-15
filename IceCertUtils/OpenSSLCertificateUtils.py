@@ -7,7 +7,7 @@
 
 import os, random, tempfile, glob
 
-from IceCertUtils.CertificateUtils import DistinguishedName, Certificate, CertificateFactory, b, d
+from IceCertUtils.CertificateUtils import DistinguishedName, Certificate, CertificateFactory, b, d, read
 
 def toDNSection(dn):
     s = "[ dn ]\n"
@@ -42,20 +42,41 @@ class OpenSSLCertificate(Certificate):
     def toText(self):
         return d(self.openSSL("x509", "-noout", "-text"))
 
-    def saveKey(self, path):
-        self.openSSL("rsa", outform="PEM", out=path)
+    def getSubjectHash(self):
+        return d(self.openSSL("x509", "-noout", "-subject_hash"))
+
+    def saveKey(self, path, password=None):
+        (_, ext) = os.path.splitext(path)
+        outform = "PEM"
+        if ext == ".der" or ext == ".crt" or ext == ".cer":
+            outform = "DER"
+        #self.openSSL(self.parent.keyalg, outform=outform, out=path, password=password)
+        self.openSSL("pkcs8", "-nocrypt -topk8", outform=outform, out=path, password=password)
         return self
 
-    def savePKCS12(self, path, password="password", chain=True):
-        if self == self.parent.cacert:
-            # If saving CA cert, just save the certificate without the key
-            self.openSSL("pkcs12", "-nokeys", out=path, password=password)
-        elif chain:
+    def savePKCS12(self, path, password=None, chain=True, root=False, addkey=None):
+        if addkey is None:
+            addkey = self != self.parent.cacert
+
+        chainfile = None
+        if chain:
             # Save the certificate chain to PKCS12
-            self.openSSL("pkcs12", "-chain", out=path, inkey=self.key, CAfile=self.parent.cacert.pem, password=password)
-        else:
-            # Save the certificate to PKCS12
-            self.openSSL("pkcs12", out=path, inkey=self.key, password=password)
+            certs = ""
+            parent = self.parent
+            while parent if root else parent.parent:
+                certs += d(read(parent.cacert.pem))
+                parent = parent.parent
+            if len(certs) > 0:
+                (f, chainfile) = tempfile.mkstemp()
+                os.write(f, b(certs))
+                os.close(f)
+
+        key = "-inkey={0}".format(self.key) if addkey else "-nokeys"
+        try:
+            self.openSSL("pkcs12", out=path, inkey=self.key, certfile=chainfile, password=password or "password")
+        finally:
+            if chainfile:
+                os.remove(chainfile)
         return self
 
     def savePEM(self, path):
@@ -78,38 +99,67 @@ class OpenSSLCertificateFactory(CertificateFactory):
     def __init__(self, *args, **kargs):
         CertificateFactory.__init__(self, *args, **kargs)
 
-        self.cacert = self.get("ca")
-        if not self.cacert:
-            self.cacert = OpenSSLCertificate(self, "ca", self.dn)
-            self.certs["ca"] = self.cacert
-            self.cacert.openSSL("req", "-x509", config =
-                                """
-                                [ req ]
-                                x509_extensions = ext
-                                distinguished_name = dn
-                                prompt = no
-                                [ ext ]
-                                basicConstraints = CA:true
-                                subjectKeyIdentifier = hash
-                                authorityKeyIdentifier = keyid:always,issuer:always
-                                {dn}
-                                """.format(dn=toDNSection(self.cacert.dn)))
-        self.dn = self.cacert.dn
+        if self.keyalg == "dsa":
+            self.keysize = os.path.join(self.home, "dsaparams.pem")
+            if not os.path.exists(self.keysize):
+                self.run("openssl", "dsaparam", 1024, outform="PEM", out=self.keysize)
+
+        if not self.cacert.exists():
+
+            subAltName = self.cacert.getAlternativeName()
+            issuerAltName = self.parent.cacert.getAlternativeName() if self.parent else None
+            altName = (("\nsubjectAltName = " + subAltName) if subAltName else "") + \
+                      (("\nissuerAltName = " + issuerAltName) if issuerAltName else "")
+
+            cacert = self.cacert
+            if not self.parent:
+                cacert.openSSL("req", "-x509", days = self.validity, config =
+                               """
+                               [ req ]
+                               x509_extensions = ext
+                               distinguished_name = dn
+                               prompt = no
+                               [ ext ]
+                               basicConstraints = CA:true
+                               subjectKeyIdentifier = hash
+                               authorityKeyIdentifier = keyid:always,issuer:always
+                               {altName}
+                               {dn}
+                               """.format(dn=toDNSection(cacert.dn),altName=altName))
+            else:
+                self.cacert = self.parent.cacert
+                req = cacert.openSSL("req", config=
+                                     """
+                                     [ req ]
+                                     distinguished_name = dn
+                                     prompt = no
+                                     {dn}
+                                     """.format(dn=toDNSection(cacert.dn)))
+
+                # Sign the certificate
+                cacert.openSSL("x509", "-req", set_serial=random.getrandbits(64), stdin=req, days = self.validity,
+                               extfile=
+                               """
+                               [ ext ]
+                               basicConstraints = CA:true
+                               subjectKeyIdentifier = hash
+                               authorityKeyIdentifier = keyid:always,issuer:always
+                               {altName}
+                               """.format(altName=altName))
+
+            self.cacert = cacert
+
+    def _createFactory(self, *args, **kargs):
+        return OpenSSLCertificateFactory(*args, **kargs)
 
     def _createChild(self, *args):
         return OpenSSLCertificate(self, *args)
 
-    def _generateChild(self, alias, dn=None, ip=None, dns=None):
-
-        subAltName = ""
-        if ip and dns:
-            subAltName = "subjectAltName = DNS: {dns}, IP: {ip}"
-        elif ip:
-            subAltName = "subjectAltName = IP: {ip}"
-        elif dns:
-            subAltName = "subjectAltName = DNS: {dns}"
-
-        cert = OpenSSLCertificate(self, alias, dn or ip or dns or alias)
+    def _generateChild(self, cert, serial, validity):
+        subAltName = cert.getAlternativeName()
+        issuerAltName = self.cacert.getAlternativeName()
+        altName = (("\nsubjectAltName = " + subAltName) if subAltName else "") + \
+                  (("\nissuerAltName = " + issuerAltName) if issuerAltName else "")
 
         # Generate a certificate request
         req = cert.openSSL("req", config=
@@ -121,14 +171,15 @@ class OpenSSLCertificateFactory(CertificateFactory):
                            """.format(dn=toDNSection(cert.dn)))
 
         # Sign the certificate
-        cert.openSSL("x509", "-req", set_serial=random.getrandbits(64), stdin=req, extfile=
+        cert.openSSL("x509", "-req", set_serial=serial or random.getrandbits(64), stdin=req,
+                     days = validity or self.validity, extfile=
                      """
                      [ ext ]
                      subjectKeyIdentifier = hash
                      authorityKeyIdentifier = keyid:always,issuer:always
                      keyUsage = nonRepudiation, digitalSignature, keyEncipherment
-                     {subAltName}
-                     """.format(subAltName = subAltName.format(dns=dns,ip=ip)))
+                     {altName}
+                     """.format(altName=altName))
 
         return cert
 
@@ -174,22 +225,22 @@ class OpenSSLCertificateFactory(CertificateFactory):
         if cmd == "req":
             command += " -keyform PEM -keyout {cert.key} -newkey {this.keyalg}:{this.keysize}"
             if "-x509" in args:
-                command += " -out {cert.pem} -passout file:{this.passpath}" # CA self-signed certificate
+                command += " -out {cert.pem} -passout file:\"{this.passpath}\"" # CA self-signed certificate
             else:
-                command += " -passout file:{this.passpath}"
+                command += " -passout file:\"{this.passpath}\""
 
         #
         # Signature parameters for "req -x509" (CA self-signed certificate) or
         # "x509 -req" (signing certificate request)
         #
         if (cmd == "req" and "-x509" in args) or (cmd == "x509" and "-req" in args):
-            command += " -{this.sigalg} -days {this.validity}"
+            command += " -{this.sigalg}"
 
         #
         # Certificate request signature parameters
         #
         if cmd == "x509" and "-req" in args:
-            command += " -CA {cacert.pem} -CAkey {cacert.key} -passin file:{this.passpath} -extensions ext " \
+            command += " -CA {cacert.pem} -CAkey {cacert.key} -passin file:\"{this.passpath}\" -extensions ext " \
                        "-out {cert.pem}"
 
         #
@@ -197,10 +248,13 @@ class OpenSSLCertificateFactory(CertificateFactory):
         #
         if cmd == "x509" and not "-req" in args:
             command += " -in {cert.pem}"
-        elif cmd == "rsa":
-            command += " -in {cert.key} -passin file:{this.passpath}"
+        elif cmd == self.keyalg or cmd == "pkcs8":
+            command += " -in {cert.key} -passin file:\"{this.passpath}\""
+            if password:
+                command += " -passout file:\"{passpath}\""
         elif cmd == "pkcs12":
-            command += " -in {cert.pem} -name {cert.alias} -export -passin file:{this.passpath} -passout file:{passpath}"
+            command += " -in {cert.pem} -name {cert.alias} -export -passin file:\"{this.passpath}\""
+            command += " -passout file:\"{passpath}\""
 
         command = command.format(cert = cert, cacert = self.cacert, this = self, passpath=passpath)
         try:

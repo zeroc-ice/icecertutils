@@ -5,7 +5,7 @@
 #
 # **********************************************************************
 
-import os, subprocess, glob
+import os, subprocess, glob, tempfile
 
 from IceCertUtils.CertificateUtils import DistinguishedName, Certificate, CertificateFactory, b, d, read, opensslSupport
 
@@ -25,20 +25,42 @@ class KeyToolCertificate(Certificate):
     def toText(self):
         return d(self.parent.keyTool("printcert", "-v", stdin = self.keyTool("exportcert")))
 
-    def saveKey(self, path):
+    def saveKey(self, path, password=None):
         if not opensslSupport:
-            raise RuntimeError("No openssl support, add opensll to your PATH to export private keys")
+            raise RuntimeError("No openssl support, add openssl to your PATH to export private keys")
 
-        self.generatePKCS12()
-        return self.parent.run("openssl", "pkcs12", "-nodes", "-in " + self.p12,
-                               "-passin file:" + self.parent.passpath, out=path)
+        #
+        # Write password to safe temporary file
+        #
+        passpath = None
+        if password:
+            (f, passpath) = tempfile.mkstemp()
+            os.write(f, b(password))
+            os.close(f)
+        try:
+            pem = self.parent.run("openssl", "pkcs12", "-nocerts", "-nodes", "-in " + self.generatePKCS12(),
+                                  passin="file:" + self.parent.passpath,
+                                  passout=("file:" + passpath) if passpath else None)
 
-    def saveJKS(self, path, password = "password", type = None, provider = None):
-        self.exportToKeyStore(path, password, type, provider, self.jks)
+            (_, ext) = os.path.splitext(path)
+            outform = "DER" if ext == ".der" or ext == ".crt" or ext == ".cer" else "PEM"
+            self.parent.run("openssl", "pkcs8", "-nocrypt -topk8", outform=outform, out=path, stdin=pem)
+
+        finally:
+            if passpath:
+                os.remove(passpath)
         return self
 
-    def savePKCS12(self, path, password = "password", chain=True):
-        self.exportToKeyStore(path, password, "PKCS12", src=self.jks)
+    def saveJKS(self, *args, **kargs):
+        return Certificate.saveJKS(self, src=self.jks, *args, **kargs)
+
+    def saveBKS(self, *args, **kargs):
+        return Certificate.saveBKS(self, src=self.jks, *args, **kargs)
+
+    def savePKCS12(self, path, password = None, chain=True, root=True, addkey=None):
+        if not chain or not root:
+            raise RuntimeError("can only export PKCS12 chain with root certificate")
+        self.exportToKeyStore(path, password, addkey=addkey, src=self.jks)
         return self
 
     def savePEM(self, path):
@@ -52,37 +74,61 @@ class KeyToolCertificate(Certificate):
     def keyTool(self, *args, **kargs):
         return self.parent.keyTool(cert=self, *args, **kargs)
 
+    def destroy(self):
+        Certificate.destroy(self)
+        if self.jks and os.path.exists(self.jks):
+            os.remove(self.jks)
+
 class KeyToolCertificateFactory(CertificateFactory):
     def __init__(self, *args, **kargs):
         CertificateFactory.__init__(self, *args, **kargs)
 
         # Transform key/signature algorithm to suitable values for keytool
-        self.keyalg = self.keyalg.upper()
-        self.sigalg = self.sigalg.upper() + "with" + self.keyalg;
+        if not self.parent:
+            self.keyalg = self.keyalg.upper()
+            self.sigalg = self.sigalg.upper() + "with" + self.keyalg;
 
         # Create the CA self-signed certificate
-        self.cacert = self.get("ca")
-        if not self.cacert:
-            self.cacert = KeyToolCertificate(self, "ca", self.dn)
-            self.certs["ca"] = self.cacert
-            self.cacert.keyTool("genkeypair", ext="bc:c", validity=self.validity, sigalg=self.sigalg)
+        if not self.cacert.exists():
+            cacert = self.cacert
+
+            subAltName = cacert.getAlternativeName()
+            issuerAltName = self.parent.cacert.getAlternativeName() if self.parent else None
+            ext = "-ext bc:c" + \
+                  ((" -ext san=" + subAltName) if subAltName else "") + \
+                  ((" -ext ian=" + issuerAltName) if issuerAltName else "")
+
+            if not self.parent:
+                cacert.keyTool("genkeypair", ext, validity=self.validity, sigalg=self.sigalg)
+            else:
+                self.cacert = self.parent.cacert
+                cacert.keyTool("genkeypair")
+                pem = cacert.keyTool("gencert", ext, validity = self.validity, stdin=cacert.keyTool("certreq"))
+                chain = ""
+                parent = self.parent
+                while parent:
+                    chain += d(read(parent.cacert.pem))
+                    parent = parent.parent
+                cacert.keyTool("importcert", stdin=chain + d(pem))
+
+            self.cacert = cacert
             self.cacert.generatePEM()
 
-        self.dn = self.cacert.dn
+    def _createFactory(self, *args, **kargs):
+        #
+        # Intermediate CAs don't work well with keytool, they probably
+        # can but at this point we don't want to spend more time on
+        # this.
+        #
+        #return KeyToolCertificateFactory(*args, **kargs)
+        raise NotImplementedError("KeyTool implementation doesn't support intermediate CAs")
 
     def _createChild(self, *args):
         return KeyToolCertificate(self, *args)
 
-    def _generateChild(self, alias, dn=None, ip=None, dns=None):
-        subAltName = None
-        if ip and dns:
-            subAltName = "san=DNS:{dns},IP:{ip}".format(ip=ip, dns=dns)
-        elif ip:
-            subAltName = "san=IP:{ip}".format(ip=ip)
-        elif dns:
-            subAltName = "san=DNS:{dns}".format(dns=dns)
-
-        cert = KeyToolCertificate(self, alias, dn or ip or dns or alias)
+    def _generateChild(self, cert, serial, validity):
+        subAltName = cert.getAlternativeName()
+        issuerAltName = self.cacert.getAlternativeName()
 
         # Generate a certificate/key pair
         cert.keyTool("genkeypair")
@@ -90,12 +136,25 @@ class KeyToolCertificateFactory(CertificateFactory):
         # Create a certificate signing request
         req = cert.keyTool("certreq")
 
+        ext = "-ext ku:c=dig,keyEnc" + \
+              ((" -ext san=" + subAltName) if subAltName else "") + \
+              ((" -ext ian=" + issuerAltName) if issuerAltName else "")
+
         # Sign the certificate with the CA
-        pem = cert.keyTool("gencert", stdin=req, ext=subAltName)
+        if validity is None or validity > 0:
+            pem = cert.keyTool("gencert", ext, validity = (validity or self.validity), stdin=req)
+        else:
+            pem = cert.keyTool("gencert", ext, startdate = "{validity}d".format(validity=validity), validity=-validity,
+                               stdin=req)
+
 
         # Concatenate the CA and signed certificate and re-import it into the keystore
-        chain = d(read(self.cacert.pem)) + d(pem)
-        cert.keyTool("importcert", stdin=chain)
+        chain = []
+        parent = self
+        while parent:
+            chain.append(d(read(parent.cacert.pem)))
+            parent = parent.parent
+        cert.keyTool("importcert", stdin="".join(chain) + d(pem))
 
         return cert
 
@@ -119,7 +178,7 @@ class KeyToolCertificateFactory(CertificateFactory):
         elif cmd == "certreq":
             command += " -sigalg {this.sigalg}"
         elif cmd == "gencert":
-            command += " -validity {this.validity} -ext ku:c=dig,keyEnc -rfc"
+            command += " -rfc"
 
         command = command.format(cert = cert, cacert = self.cacert, this = self)
         return self.run(command, *args, **kargs)

@@ -39,7 +39,7 @@ if keytoolSupport:
     bksProvider = "org.bouncycastle.jce.provider.BouncyCastleProvider"
     p = subprocess.Popen("javap " + bksProvider, shell=True, stdout=DEVNULL, stderr=subprocess.PIPE)
     stdout, stderr = p.communicate()
-    if p.wait() == 0 and stderr.find("Error:") == -1:
+    if p.wait() == 0 and d(stderr).find("Error:") == -1:
         bksSupport = True
 
 #
@@ -101,12 +101,12 @@ class DistinguishedName:
         return DistinguishedName(**args)
 
 class Certificate:
-    def __init__(self, parent, alias, dn = None):
+    def __init__(self, parent, alias, dn=None, altName=None):
         self.parent = parent
-        self.dn = dn if isinstance(dn, DistinguishedName) else DistinguishedName(dn, default=self.parent.dn)
+        self.dn = dn
+        self.altName = altName or {}
         self.alias = alias
         self.pem = None
-        self.p12 = None
 
     def __str__(self):
         return str(self.dn)
@@ -121,13 +121,12 @@ class Certificate:
         if not os.path.exists(self.pem):
             self.savePEM(self.pem)
 
-    def generatePKCS12(self):
+    def generatePKCS12(self, root=True):
         # Generate PKCS12 for internal use
-        if not self.p12:
-            self.p12 = os.path.join(self.parent.home, self.alias + ".p12")
-        if not os.path.exists(self.p12):
-            self.savePKCS12(self.p12, password=self.parent.password)
-        return self.p12
+        path = os.path.join(self.parent.home, self.alias + (".p12" if root else "-noroot.p12"))
+        if not os.path.exists(path):
+            self.savePKCS12(path, password=self.parent.password, chain=True, root=root, addkey=True)
+        return path
 
     def save(self, path, *args, **kargs):
         if os.path.exists(path):
@@ -146,7 +145,10 @@ class Certificate:
         else:
             raise RuntimeError("unknown certificate extension `{0}'".format(ext))
 
-    def saveKey(self, path):
+    def getSubjectHash(self):
+        raise NotImplementedError("getSubjectHash")
+
+    def saveKey(self, path, password=None):
         raise NotImplementedError("saveKey")
 
     def savePKCS12(self, path):
@@ -158,23 +160,28 @@ class Certificate:
     def saveDER(self, path):
         raise NotImplementedError("saveDER")
 
-    def saveJKS(self, path, password="password", type="JKS", provider=None):
-        self.exportToKeyStore(path, password, type, provider)
+    def saveJKS(self, *args, **kargs):
+        self.exportToKeyStore(*args, **kargs)
         return self
 
-    def saveBKS(self, path, password="password"):
+    def saveBKS(self, *args, **kargs):
         if not bksSupport:
             raise RuntimeError("No BouncyCastle support, you need to install the BouncyCastleProvider with your JDK")
-
-        self.saveJKS(path, password, "BKS", bksProvider)
+        self.exportToKeyStore(provider=bksProvider, *args, **kargs)
         return self
 
     def destroy(self):
-        for f in [self.pem, self.p12]:
+        for f in [os.path.join(self.parent.home, self.alias + ".pem"),
+                  os.path.join(self.parent.home, self.alias + ".p12"),
+                  os.path.join(self.parent.home, self.alias + "-noroot.p12")]:
             if f and os.path.exists(f):
                 os.remove(f)
 
-    def exportToKeyStore(self, dest, password, type = None, provider = None, src = None):
+    def exportToKeyStore(self, dest, password=None, alias=None, addkey=None, caalias=None, chain=True, root=False,
+                         provider=None, src=None):
+        if addkey is None:
+            addkey = self != self.parent.cacert
+
         if not keytoolSupport:
             raise RuntimeError("No keytool support, add keytool from your JDK bin directory to your PATH")
 
@@ -184,87 +191,164 @@ class Certificate:
 
         # Write password to safe temporary file
         (f, passpath) = tempfile.mkstemp()
-        os.write(f, b(password))
+        os.write(f, b(password or "password"))
         os.close(f)
 
         try:
-            if self != self.parent.cacert:
+            #
+            # Add the CA certificate as a trusted certificate if requests
+            #
+            if caalias:
                 args = {
-                    "src": src or self.generatePKCS12(),
-                    "srctype" : getType(src or self.generatePKCS12()),
                     "dest": dest,
-                    "desttype": type or getType(dest),
+                    "desttype": getType(dest),
                     "pass": passpath,
+                    "caalias": caalias,
+                    "cert": self.parent.cacert,
+                    "factory": self.parent
+                }
+                command = "keytool -noprompt -importcert -file {cert.pem} -alias {caalias}"
+                command += " -keystore {dest} -storepass:file {pass} -storetype {desttype}"
+                self.parent.run(command.format(**args), provider=provider)
+
+            if not src:
+                src = self.generatePKCS12(root)
+
+            if addkey:
+                args = {
+                    "src": src,
+                    "srctype" : getType(src),
+                    "dest": dest,
+                    "desttype": getType(dest),
+                    "destalias": alias or self.alias,
+                    "pass": passpath,
+                    "cert": self,
+                    "factory": self.parent,
                 }
                 command = "keytool -noprompt -importkeystore -srcalias {cert.alias} "
                 command += " -srckeystore {src} -srcstorepass:file {factory.passpath} -srcstoretype {srctype}"
                 command += " -destkeystore {dest} -deststorepass:file {pass} -destkeypass:file {pass} "
-                command += " -deststoretype {desttype}"
-                if provider:
-                    command += " -provider " + provider
-                self.parent.run(command.format(cert=self, factory=self.parent, **args))
+                command += " -destalias {destalias} -deststoretype {desttype}"
             else:
                 args = {
                     "dest": dest,
-                    "desttype": type or getType(dest),
+                    "destalias": alias or self.alias,
+                    "desttype": getType(dest),
                     "pass": passpath,
+                    "cert": self,
+                    "factory": self.parent
                 }
+                command = "keytool -noprompt -importcert -file {cert.pem} -alias {destalias}"
+                command += " -keystore {dest} -storepass:file {pass} -storetype {desttype} "
 
-            # Also add the CA certificate as a trusted certificate if JKS/BKS
-            if args["desttype"] != "PKCS12":
-                command = "keytool -noprompt -importcert -file {cert.pem} -alias {cert.alias}"
-                command += " -keystore {dest} -storepass:file {pass} -storetype {desttype}"
-                if provider:
-                    command += " -provider " + provider
-                self.parent.run(command.format(cert=self.parent.cacert, factory=self.parent, **args))
+            self.parent.run(command.format(**args), provider=provider)
         finally:
             os.remove(passpath)
+
+    def getAlternativeName(self):
+        items = []
+        for k, v in self.altName.items():
+            items.append("{0}:{1}".format(k, v))
+        return ",".join(items) if len(items) > 0 else None
 
 defaultDN = DistinguishedName("ZeroC IceCertUtils CA", "Ice", "ZeroC, Inc.", "Jupiter", "Florida", "US",
                               emailAddress="info@zeroc.com")
 
+def getDNAndAltName(alias, defaultDN, dn=None, altName=None, **kargs):
+    def consume(kargs, keys):
+        args = {}
+        for k in keys:
+            if k in kargs:
+                args[k] = kargs[k]
+                del kargs[k]
+            elif k.upper() in kargs:
+                args[k] = kargs[k.upper()]
+                del kargs[k.upper()]
+            elif k.lower() in kargs:
+                args[k] = kargs[k.lower()]
+                del kargs[k.lower()]
+        return (kargs, args)
+
+    if not altName:
+        # Extract alternative name arguments
+        (kargs, altName) = consume(kargs, ["IP", "DNS", "email", "URI"])
+
+    if not dn:
+        # Extract distinguished name arguments
+        (kargs, dn) = consume(kargs, ["CN", "OU", "O", "L", "ST", "C", "emailAddress"])
+        if len(dn) > 0:
+            dn = DistinguishedName(default=defaultDN, **dn)
+        else:
+            for k in ["ip", "dns", "email"]:
+                if k in altName:
+                    dn = DistinguishedName(altName[k], default=defaultDN)
+                    break
+            else:
+                dn = DistinguishedName(alias, default=defaultDN)
+
+    return (kargs, dn, altName)
+
 class CertificateFactory:
-    def __init__(self, home=None, debug=None, dn=None, validity=1825, keysize=2048, keyalg="rsa", sigalg="sha256",
-                 password = "password"):
+    def __init__(self, home=None, debug=None, validity=None, keysize=None, keyalg=None, sigalg=None, password=None,
+                 parent=None, *args, **kargs):
+
+        (kargs, dn, altName) = getDNAndAltName("ca", defaultDN, **kargs)
+        if len(kargs) > 0:
+            raise TypeError("unexpected arguments")
+
+        self.parent = parent;
 
         # Certificate generate parameters
-        self.validity = validity
-        self.keysize = keysize
-        self.keyalg = keyalg
-        self.sigalg = sigalg
+        self.validity = validity or (parent.validity if parent else 1825)
+        self.keysize = keysize or (parent.keysize if parent else 2048)
+        self.keyalg = keyalg or (parent.keyalg if parent else "rsa")
+        self.sigalg = sigalg or (parent.sigalg if parent else "sha256")
 
         # Temporary directory for storing intermediate files
         self.rmHome = home is None
         self.home = home or tempfile.mkdtemp();
-        self.dn = dn or defaultDN
 
-        # The CA certificate and the array of certificates created with this factory
-        self.cacert = None
         self.certs = {}
+        self.factories = {}
 
         # The password used to protect keys and key stores from the factory home directory
-        self.password = password
-        (f, self.passpath) = tempfile.mkstemp()
-        os.write(f, b(self.password))
-        os.close(f)
+        self.password = password or parent.password if parent else "password"
+        if parent:
+            self.passpath = parent.passpath
+        else:
+            (f, self.passpath) = tempfile.mkstemp()
+            os.write(f, b(self.password))
+            os.close(f)
 
-        @atexit.register
-        def rmpass():
-            if os.path.exists(self.passpath):
-                os.remove(self.passpath)
+            @atexit.register
+            def rmpass():
+                if os.path.exists(self.passpath):
+                    os.remove(self.passpath)
 
-        self.debug = debug
+        self.debug = debug or (parent.debug if parent else False)
         if self.debug:
             print("[debug] using %s implementation" % self.__class__.__name__)
+
+        # Load the CA certificate if it exists
+        self.cacert = self._createChild("ca", dn or defaultDN, altName)
+        self.certs["ca"] = self.cacert
+        if self.cacert.exists():
+            self.cacert.load()
 
     def __str__(self):
         return str(self.cacert)
 
-    def create(self, alias, *args, **kargs):
+    def create(self, alias, dn=None, altName=None, serial=None, validity=None, *args, **kargs):
         cert = self.get(alias)
         if cert:
             cert.destroy() # Remove previous certificate
-        cert = self._generateChild(alias, *args, **kargs)
+
+        (kargs, dn, altName) = getDNAndAltName(alias, self.cacert.dn, **kargs)
+        if len(args) > 0 or len(kargs) > 0:
+            raise TypeError("unexpected arguments")
+
+        cert = self._createChild(alias, dn, altName)
+        self._generateChild(cert, serial, validity)
         self.certs[alias] = cert
         return cert
 
@@ -275,22 +359,48 @@ class CertificateFactory:
         if cert.exists():
             self.certs[alias] = cert.load()
             return cert
-
-        return None
+        else:
+            return None
 
     def getCA(self):
         return self.cacert
 
+    def createIntermediateFactory(self, alias, dn=None, altName=None):
+        factory = self.getIntermediateFactory(alias)
+        if factory:
+            factory.destroy(force = True)
+
+        home = os.path.join(self.home, alias)
+        os.mkdir(home)
+
+        if not dn:
+            dn = DistinguishedName(alias, default=self.cacert.dn)
+
+        factory = self._createFactory(home = home, dn = dn, altName=altName, parent = self)
+        self.factories[alias] = factory
+        return factory
+
+    def getIntermediateFactory(self, alias):
+        if alias in self.factories:
+            return self.factories[alias]
+
+        home = os.path.join(self.home, alias)
+        if not os.path.isdir(home):
+            return None
+
+        factory = self._createFactory(home = home, parent = self)
+        self.factories[alias] = factory
+        return factory
+
     def destroy(self, force=False):
-        if self.rmHome or force:
+        if self.rmHome:
             # Cleanup temporary directory
+            shutil.rmtree(self.home)
+        elif force:
             if os.path.exists(self.passpath):
                 os.remove(self.passpath)
-            if self.cacert:
-                self.cacert.destroy()
             for (a,c) in self.certs.items():
                 c.destroy()
-            shutil.rmtree(self.home)
 
     def run(self, cmd, *args, **kargs):
 

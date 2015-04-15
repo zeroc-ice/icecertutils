@@ -52,8 +52,8 @@ def parseArgs(script, min, max, shortopts, longopts, usage):
 
    return (options, args)
 
-def getCertificateAuthority(home, cadb, capass, verbose):
-   if not os.path.exists(cadb):
+def getCertificateAuthority(home, cafile, capass, verbose):
+   if not os.path.exists(cafile):
       print(sys.argv[0] + ": the CA it not initialized.")
       sys.exit(1)
 
@@ -62,9 +62,9 @@ def getCertificateAuthority(home, cadb, capass, verbose):
          with open(os.path.join(home, "capass")) as f: capass = f.read()
       else:
          capass = getpass.getpass("Enter the CA passphrase:")
-   return IceCertUtils.CertificateFactory(home=cadb, debug=verbose, password=capass)
+   return IceCertUtils.CertificateFactory(home=home, debug=verbose, password=capass)
 
-def init(script, home, cadb, capass, verbose):
+def init(script, home, cafile, capass, verbose):
    opts, _ = parseArgs(script, 0, 0, "", ["overwrite", "no-capass"], "[--overwrite --no-capass]\n"
    "\n"
    "Initializes the certificate authority database.\n"
@@ -77,24 +77,24 @@ def init(script, home, cadb, capass, verbose):
 
    if "overwrite" in opts:
       # If the CA exists then destroy it.
-      if os.path.exists(cadb):
+      if os.path.exists(cafile):
          if not question("Warning: running this command will destroy your existing CA setup!\n"
                          "Do you want to continue? (y/n)", ['y', 'Y']):
             sys.exit(1)
-         shutil.rmtree(cadb)
+         shutil.rmtree(home)
       if os.path.exists(os.path.join(home, "capass")):
          os.remove(os.path.join(home, "capass"))
 
    #
-   # Check that the cadb isn't already populated.
+   # Check that the cafile doesn't exist
    #
-   if os.path.exists(cadb):
+   if os.path.exists(cafile):
       print(sys.argv[0] + ": CA has already been initialized.")
       print("Use the --overwrite option to re-initialize the database.")
       sys.exit(1)
 
    try:
-      os.makedirs(cadb)
+      os.makedirs(home)
    except OSError:
       pass
 
@@ -138,7 +138,7 @@ def init(script, home, cadb, capass, verbose):
          else:
             break
 
-   IceCertUtils.CertificateFactory(home=cadb, debug=verbose, dn=dn, password=capass)
+   IceCertUtils.CertificateFactory(home=home, debug=verbose, dn=dn, password=capass)
 
    print("The CA is initialized in " + home)
 
@@ -229,7 +229,7 @@ def main():
        home = os.path.join(home, ".iceca")
 
     home = os.path.normpath(home)
-    cadb = os.path.join(home, "db")
+    cafile = os.path.join(home, "ca.pem")
 
     #
     # Work out the position of the script.
@@ -260,10 +260,10 @@ def main():
 
     try:
         if sys.argv[script] == "init":
-           init(script, home, cadb, capass, verbose)
+           init(script, home, cafile, capass, verbose)
            sys.exit(0)
 
-        factory = getCertificateAuthority(home, cadb, capass, verbose)
+        factory = getCertificateAuthority(home, cafile, capass, verbose)
         if sys.argv[script] == "create":
            create(script, factory)
         elif sys.argv[script] == "export":

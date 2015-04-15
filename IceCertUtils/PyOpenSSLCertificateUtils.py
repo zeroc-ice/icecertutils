@@ -69,18 +69,38 @@ X509v3 extensions:""" % (self.x509.get_version() + 1,
             s += "\n    " + d(ext.get_short_name()).strip() + ":\n        " + str(ext).replace("\n", "\n        ")
         return s
 
-    def saveKey(self, path):
-        write(path, crypto.dump_privatekey(crypto.FILETYPE_PEM, self.pkey))
+    def getSubjectHash(self):
+        return format(self.x509.subject_name_hash(), 'x')
 
-    def savePKCS12(self, path, password="password", chain=True):
+    def saveKey(self, path, password=None):
+        (_, ext) = os.path.splitext(path)
+        type = crypto.FILETYPE_PEM
+        if ext == ".der" or ext == ".crt" or ext == ".cer":
+            type = crypto.FILETYPE_ASN1
+
+        if password:
+            write(path, crypto.dump_privatekey(type, self.pkey, self.parent.cipher, b(password)))
+        else:
+            write(path, crypto.dump_privatekey(type, self.pkey))
+        return self
+
+    def savePKCS12(self, path, password=None, chain=True, root=False, addkey=None):
+        if addkey is None:
+            addkey = self != self.parent.cacert
+
         p12 = crypto.PKCS12()
         p12.set_certificate(self.x509)
         p12.set_friendlyname(b(self.alias))
-        if self.parent.cacert != self:
+        if addkey:
             p12.set_privatekey(self.pkey)
-            if chain:
-                p12.set_ca_certificates([self.parent.cacert.x509])
-        write(path, p12.export(b(password)))
+        if chain:
+            certs = []
+            parent = self.parent
+            while parent if root else parent.parent:
+                certs.append(parent.cacert.x509)
+                parent = parent.parent
+            p12.set_ca_certificates(certs)
+        write(path, p12.export(b(password or "password")))
         return self
 
     def savePEM(self, path):
@@ -96,23 +116,27 @@ X509v3 extensions:""" % (self.x509.get_version() + 1,
             write(self.key, crypto.dump_privatekey(crypto.FILETYPE_PEM, self.pkey, self.parent.cipher,
                                                    b(self.parent.password)))
 
+    def destroy(self):
+        Certificate.destroy(self)
+        if os.path.exists(self.key):
+            os.remove(self.key)
+
 class PyOpenSSLCertificateFactory(CertificateFactory):
     def __init__(self, *args, **kargs):
         CertificateFactory.__init__(self, *args, **kargs)
 
-        self.keyalg = crypto.TYPE_RSA if self.keyalg == "rsa" else crypto.TYPE_DSA
+        if not self.parent:
+            self.keyalg = crypto.TYPE_RSA if self.keyalg == "rsa" else crypto.TYPE_DSA
+
         self.cipher = "DES-EDE3-CBC" # Cipher used to encode the private key
 
-        self.cacert = self.get("ca")
-        if not self.cacert:
-            self.cacert = PyOpenSSLCertificate(self, "ca", self.dn)
-
+        if not self.cacert.exists():
             # Generate the CA certificate
             key = crypto.PKey()
             key.generate_key(self.keyalg, self.keysize)
 
             req = crypto.X509Req()
-            setSubject(self.dn, req.get_subject())
+            setSubject(self.cacert.dn, req.get_subject())
 
             req.set_pubkey(key)
             req.sign(key, self.sigalg)
@@ -120,37 +144,45 @@ class PyOpenSSLCertificateFactory(CertificateFactory):
             x509 = crypto.X509()
             x509.set_version(0x02)
             x509.set_serial_number(random.getrandbits(64))
+
             x509.gmtime_adj_notBefore(0)
             x509.gmtime_adj_notAfter(60 * 60 * 24 * self.validity)
-            x509.set_issuer(req.get_subject())
             x509.set_subject(req.get_subject())
             x509.set_pubkey(req.get_pubkey())
-            x509.add_extensions([
+            extensions = [
                 crypto.X509Extension(b('basicConstraints'), False, b('CA:true')),
                 crypto.X509Extension(b('subjectKeyIdentifier'), False, b('hash'), subject=x509),
-            ])
-            x509.sign(key, self.sigalg)
+            ]
+
+            subjectAltName = self.cacert.getAlternativeName()
+            if subjectAltName:
+                extensions.append(crypto.X509Extension(b('subjectAltName'), False, b(subjectAltName)))
+
+            if self.parent:
+                extensions.append(crypto.X509Extension(b('authorityKeyIdentifier'), False,
+                                                       b('keyid:always,issuer:always'), issuer=self.parent.cacert.x509))
+                if self.parent.cacert.getAlternativeName():
+                    extensions.append(crypto.X509Extension(b('issuerAltName'), False, b("issuer:copy"),
+                                                           issuer=self.parent.cacert.x509))
+
+            x509.add_extensions(extensions)
+
+            if self.parent:
+                x509.set_issuer(self.parent.cacert.x509.get_subject())
+                x509.sign(self.parent.cacert.pkey, self.sigalg)
+            else:
+                x509.set_issuer(req.get_subject())
+                x509.sign(key, self.sigalg)
 
             self.cacert.init(key, x509)
-            self.certs["ca"] = self.cacert
 
-        self.dn = self.cacert.dn
+    def _createFactory(self, *args, **kargs):
+        return PyOpenSSLCertificateFactory(*args, **kargs)
 
     def _createChild(self, *args):
         return PyOpenSSLCertificate(self, *args)
 
-    def _generateChild(self, alias, dn=None, ip=None, dns=None):
-
-        subAltName = None
-        if ip and dns:
-            subAltName = "DNS: {dns}, IP: {ip}"
-        elif ip:
-            subAltName = "IP: {ip}"
-        elif dns:
-            subAltName = "DNS: {dns}"
-
-        cert = PyOpenSSLCertificate(self, alias, dn or ip or dns or alias)
-
+    def _generateChild(self, cert, serial, validity):
         key = crypto.PKey()
         key.generate_key(self.keyalg, self.keysize)
 
@@ -162,9 +194,14 @@ class PyOpenSSLCertificateFactory(CertificateFactory):
 
         x509 = crypto.X509()
         x509.set_version(0x02)
-        x509.set_serial_number(random.getrandbits(64))
-        x509.gmtime_adj_notBefore(0)
-        x509.gmtime_adj_notAfter(60 * 60 * 24 * self.validity)
+        x509.set_serial_number(serial or random.getrandbits(64))
+        if validity is None or validity > 0:
+            x509.gmtime_adj_notBefore(0)
+            x509.gmtime_adj_notAfter(60 * 60 * 24 * (validity or self.validity))
+        else:
+            x509.gmtime_adj_notBefore(60 * 60 * 24 * validity)
+            x509.gmtime_adj_notAfter(0)
+
         x509.set_issuer(self.cacert.x509.get_subject())
         x509.set_subject(req.get_subject())
         x509.set_pubkey(req.get_pubkey())
@@ -175,8 +212,12 @@ class PyOpenSSLCertificateFactory(CertificateFactory):
                                  issuer=self.cacert.x509),
             crypto.X509Extension(b('keyUsage'), False, b('nonRepudiation, digitalSignature, keyEncipherment'))
         ]
+        subAltName = cert.getAlternativeName()
         if subAltName:
-            extensions.append(crypto.X509Extension(b('subjectAltName'), False, b(subAltName.format(dns=dns,ip=ip))))
+            extensions.append(crypto.X509Extension(b('subjectAltName'), False, b(subAltName)))
+        if self.cacert.getAlternativeName():
+            extensions.append(crypto.X509Extension(b('issuerAltName'), False, b("issuer:copy"),
+                                                   issuer=self.cacert.x509))
         x509.add_extensions(extensions)
 
         x509.sign(self.cacert.pkey, self.sigalg)

@@ -29,40 +29,82 @@ class TestFactory(unittest.TestCase):
 
     def test_transient(self):
         f = vars(IceCertUtils)[self.factory]()
-
-        self.assertFalse(os.path.exists("ca.pem"))
-        f.getCA().save("ca.pem")
-        self.assertTrue(os.path.exists("ca.pem"))
-
         self.assertTrue(len(f.getCA().toText()) > 0)
 
-        cert = f.create("test")
+        def testsave(path, fn):
+            self.assertFalse(os.path.exists(path))
+            fn(path)
+            self.assertTrue(os.path.exists(path))
+            os.remove(path)
 
+        testsave("ca.pem", lambda path: f.getCA().save(path))
+        testsave("ca-with-key.p12", lambda path: f.getCA().save(path, addkey=True))
+
+        cert = f.create("test",validity=1)
         for s in ["test.pem", "test.p12"]:
-            self.assertFalse(os.path.exists(s))
-            cert.save(s, password="exportpassword")
-            self.assertTrue(os.path.exists(s))
-
-        self.assertFalse(os.path.exists("test-nochain.p12"))
-        cert.save("test-nochain.p12", chain=False)
-        self.assertTrue(os.path.exists("test-nochain.p12"))
-
-        self.assertFalse(os.path.exists("test_priv.pem"))
-        cert.saveKey("test_priv.pem")
-        self.assertTrue(os.path.exists("test_priv.pem"))
-
-        for s in ["ca.pem", "test.pem", "test.p12", "test-nochain.p12", "test_priv.pem"]:
-            os.remove(s)
-
+            testsave(s, lambda path: cert.save(path, password="exportpassword"))
+        if self.factory != "KeyToolCertificateFactory":
+            testsave("test-nochain.p12", lambda path: cert.save(path, chain=False))
+            testsave("test-noroot.p12", lambda path: cert.save(path, root=False))
+        testsave("test_priv.pem", lambda path: cert.saveKey(path))
+        testsave("test_priv_pass.pem", lambda path: cert.saveKey(path, password="test"))
         if keytoolSupport:
-            cert.save("test.jks")
-            os.remove("test.jks")
-
-        if bksSupport:
-            cert.save("test.bks")
-            os.remove("test.bks")
+            testsave("test.jks", lambda path: cert.save(path))
+            testsave("test.bks", lambda path: cert.save(path))
+            testsave("test-ca.jks", lambda path: cert.save(path, caalias="cacert"))
+            testsave("test-ca.bks", lambda path: cert.save(path, caalias="cacert"))
 
         f.destroy()
+
+    def test_dn(self):
+        Factory = vars(IceCertUtils)[self.factory]
+
+        factory = Factory(cn="cnca", ou="ouca", o="oca", l="lca", st="stca", c="FR", emailAddress="eaca")
+        cert = factory.create("cert", cn="cnk", ou="ouk", o="ok", l="lk", st="stk", c="EN", emailAddress="eak")
+
+        for (c, s) in [(factory.getCA(), "ca"), (cert, "k")]:
+            self.assertEquals(c.dn.CN, "cn%s" % s)
+            self.assertEquals(c.dn.OU, "ou%s" % s)
+            self.assertEquals(c.dn.O, "o%s" % s)
+            self.assertEquals(c.dn.L, "l%s" % s)
+            self.assertEquals(c.dn.ST, "st%s" % s)
+            self.assertEquals(c.dn.C, "EN" if s == "k" else "FR")
+            self.assertEquals(c.dn.emailAddress, "ea%s" % s)
+
+            txt = c.toText()
+            self.assertTrue(txt.find("CN=cn%s" % s) > 0)
+            self.assertTrue(txt.find("OU=ou%s" % s) > 0)
+            self.assertTrue(txt.find("O=o%s" % s) > 0)
+            self.assertTrue(txt.find("L=l%s" % s) > 0)
+            self.assertTrue(txt.find("ST=st%s" % s) > 0)
+            self.assertTrue(txt.find("C=EN" if s == "k" else "C=FR") > 0)
+            self.assertTrue(txt.find("=ea%s" % s) > 0)
+
+        factory.destroy()
+
+    def test_altName(self):
+        Factory = vars(IceCertUtils)[self.factory]
+        dn = IceCertUtils.DistinguishedName("CN")
+        factory = Factory(dn=dn, ip="127.0.0.1", dns="ca.zeroc.com", email="ca@zeroc.com", uri="http://www.zeroc.com")
+        cert = factory.create("cert", cn = "CERT", ip="127.0.0.2", dns="cert.zeroc.com", email="cert@zeroc.com")
+
+        txt = factory.getCA().toText()
+        self.assertTrue(txt.find("127.0.0.1") > 0)
+        self.assertTrue(txt.find("ca.zeroc.com") > 0)
+        self.assertTrue(txt.find("ca@zeroc.com") > 0)
+        self.assertTrue(txt.find("http://www.zeroc.com") > 0)
+
+        txt = cert.toText()
+        self.assertTrue(txt.find("127.0.0.1") > 0)
+        self.assertTrue(txt.find("ca.zeroc.com") > 0)
+        self.assertTrue(txt.find("ca@zeroc.com") > 0)
+        self.assertTrue(txt.find("http://www.zeroc.com") > 0)
+
+        self.assertTrue(txt.find("127.0.0.2") > 0)
+        self.assertTrue(txt.find("cert.zeroc.com") > 0)
+        self.assertTrue(txt.find("cert@zeroc.com") > 0)
+
+        factory.destroy()
 
     def test_persistent(self):
 
@@ -88,6 +130,24 @@ class TestFactory(unittest.TestCase):
         self.assertEqual(b.toText(), a.toText())
 
         f.destroy(force=True)
+
+        os.rmdir(self.home)
+
+    def test_intermediate(self):
+        if self.factory == "KeyToolCertificateFactory":
+            # Intermediate certificate don't work well with KeyTool
+            return
+
+        f = vars(IceCertUtils)[self.factory](dn=IceCertUtils.DistinguishedName("CA"))
+        im1 = f.createIntermediateFactory("im1")
+        self.assertEqual(str(im1), "CN=im1")
+        im2 = im1.createIntermediateFactory("im2")
+        self.assertEqual(str(im2), "CN=im2")
+        c1 = im2.create("test")
+        self.assertEqual(str(c1), "CN=test")
+        c2 = f.getIntermediateFactory("im1").getIntermediateFactory("im2").get("test")
+        self.assertEqual(c1, c2)
+        f.destroy()
 
 class PyOpenSSLTestFactory(TestFactory):
 
