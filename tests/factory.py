@@ -85,20 +85,20 @@ class TestFactory(unittest.TestCase):
     def test_altName(self):
         Factory = vars(IceCertUtils)[self.factory]
         dn = IceCertUtils.DistinguishedName("CN")
-        factory = Factory(dn=dn, ip="127.0.0.1", dns="ca.zeroc.com", email="ca@zeroc.com", uri="http://www.zeroc.com")
+        factory = Factory(dn=dn, ip="127.0.0.1", dns="ca.zeroc.com", email="ca@zeroc.com", uri="https://zeroc.com")
         cert = factory.create("cert", cn = "CERT", ip="127.0.0.2", dns="cert.zeroc.com", email="cert@zeroc.com")
 
         txt = factory.getCA().toText()
         self.assertTrue(txt.find("127.0.0.1") > 0)
         self.assertTrue(txt.find("ca.zeroc.com") > 0)
         self.assertTrue(txt.find("ca@zeroc.com") > 0)
-        self.assertTrue(txt.find("http://www.zeroc.com") > 0)
+        self.assertTrue(txt.find("https://zeroc.com") > 0)
 
         txt = cert.toText()
         self.assertTrue(txt.find("127.0.0.1") > 0)
         self.assertTrue(txt.find("ca.zeroc.com") > 0)
         self.assertTrue(txt.find("ca@zeroc.com") > 0)
-        self.assertTrue(txt.find("http://www.zeroc.com") > 0)
+        self.assertTrue(txt.find("https://zeroc.com") > 0)
 
         self.assertTrue(txt.find("127.0.0.2") > 0)
         self.assertTrue(txt.find("cert.zeroc.com") > 0)
