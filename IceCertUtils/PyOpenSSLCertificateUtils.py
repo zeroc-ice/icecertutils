@@ -103,8 +103,14 @@ X509v3 extensions:""" % (self.x509.get_version() + 1,
         write(path, p12.export(b(password or "password")))
         return self
 
-    def savePEM(self, path):
-        write(path, crypto.dump_certificate(crypto.FILETYPE_PEM, self.x509))
+    def savePEM(self, path, chain=True, root=False):
+        text = crypto.dump_certificate(crypto.FILETYPE_PEM, self.x509)
+        if chain:
+            parent = self.parent
+            while parent if root else parent.parent:
+                text += crypto.dump_certificate(crypto.FILETYPE_PEM, parent.cacert.x509)
+                parent = parent.parent
+        write(path, text)
         return self
 
     def saveDER(self, path):

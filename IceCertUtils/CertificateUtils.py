@@ -338,7 +338,7 @@ class CertificateFactory:
     def __str__(self):
         return str(self.cacert)
 
-    def create(self, alias, dn=None, altName=None, serial=None, validity=None, *args, **kargs):
+    def create(self, alias, serial=None, validity=None, *args, **kargs):
         cert = self.get(alias)
         if cert:
             cert.destroy() # Remove previous certificate
@@ -365,7 +365,7 @@ class CertificateFactory:
     def getCA(self):
         return self.cacert
 
-    def createIntermediateFactory(self, alias, dn=None, altName=None):
+    def createIntermediateFactory(self, alias, *args, **kargs):
         factory = self.getIntermediateFactory(alias)
         if factory:
             factory.destroy(force = True)
@@ -373,8 +373,9 @@ class CertificateFactory:
         home = os.path.join(self.home, alias)
         os.mkdir(home)
 
-        if not dn:
-            dn = DistinguishedName(alias, default=self.cacert.dn)
+        (kargs, dn, altName) = getDNAndAltName(alias, self.cacert.dn, **kargs)
+        if len(args) > 0 or len(kargs) > 0:
+            raise TypeError("unexpected arguments")
 
         factory = self._createFactory(home = home, dn = dn, altName=altName, parent = self)
         self.factories[alias] = factory

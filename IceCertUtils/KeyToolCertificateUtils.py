@@ -7,7 +7,7 @@
 
 import os, subprocess, glob, tempfile
 
-from IceCertUtils.CertificateUtils import DistinguishedName, Certificate, CertificateFactory, b, d, read, opensslSupport
+from IceCertUtils.CertificateUtils import DistinguishedName, Certificate, CertificateFactory, b, d, read, opensslSupport, write
 
 class KeyToolCertificate(Certificate):
     def __init__(self, *args):
@@ -63,8 +63,14 @@ class KeyToolCertificate(Certificate):
         self.exportToKeyStore(path, password, addkey=addkey, src=self.jks)
         return self
 
-    def savePEM(self, path):
-        self.keyTool("exportcert", "-rfc", file=path)
+    def savePEM(self, path, chain=True, root=False):
+        text = self.keyTool("exportcert", "-rfc")
+        if chain:
+            parent = self.parent
+            while parent if root else parent.parent:
+                text += parent.cacert.keyTool("exportcert", "-rfc")
+                parent = parent.parent
+        write(path, text)
         return self
 
     def saveDER(self, path):

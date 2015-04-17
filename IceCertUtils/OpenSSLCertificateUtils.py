@@ -7,7 +7,7 @@
 
 import os, random, tempfile, glob
 
-from IceCertUtils.CertificateUtils import DistinguishedName, Certificate, CertificateFactory, b, d, read
+from IceCertUtils.CertificateUtils import DistinguishedName, Certificate, CertificateFactory, b, d, read, write
 
 def toDNSection(dn):
     s = "[ dn ]\n"
@@ -79,8 +79,14 @@ class OpenSSLCertificate(Certificate):
                 os.remove(chainfile)
         return self
 
-    def savePEM(self, path):
-        self.openSSL("x509", outform="PEM", out=path)
+    def savePEM(self, path, chain=True, root=False):
+        text = self.openSSL("x509", outform="PEM")
+        if chain:
+            parent = self.parent
+            while parent if root else parent.parent:
+                text += parent.cacert.openSSL("x509", outform="PEM")
+                parent = parent.parent
+        write(path, text)
         return self
 
     def saveDER(self, path):
