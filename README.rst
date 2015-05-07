@@ -1,4 +1,4 @@
-The Ice Certificate Utilities package is a small Python library that
+The Ice Cert Utils package is a small Python library that
 easily creates certificates for use with Ice clients or servers.
 
 Here is an example of how to create a certificate:
