@@ -28,6 +28,7 @@ Initializing the certificate authority
 Usage:
 
 ::
+
     usage: init [--overwrite --no-capass]
 
     Initializes the certificate authority database.
@@ -83,7 +84,8 @@ Exporting a certificate
 
 Usage:
 
-''
+::
+
     usage: export [--password <password>] [--alias <alias>] path
 
     Export a certificate from the CA to the given file path. If --alias isn't
