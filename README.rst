@@ -2,10 +2,34 @@ The Ice Certificate Utilities package includes the iceca command line utility an
 
 It relies on PyOpenSSL for the creation of certificates. The Java KeyStore files are created with the keytool utility. The Java BouncyCastle provider is required to create BouncyCastle KeyStore files.
 
-The iceca command line utility
-==============================
+Installation
+============
 
-The iceca utility provides a small certificate authority to allow easily create certificates for use with Ice client and servers. It supports commands for initialization the CA database, creating certificates and exporting the created certificates.
+We recommend using ``pip`` or ``easy_install`` to install this
+package.
+
+
+Home Page
+=========
+
+Visit `ZeroC's home page <https://zeroc.com>`_ for the latest news
+and information about Ice.
+
+
+Support
+=======
+
+Join us on our `user forums <https://zeroc.com/forums/forum.php>`_ if you have questions
+about this package.
+
+
+Package Contents
+================
+
+The iceca command line utility
+------------------------------
+
+The iceca utility provides a small certificate authority to allow creating certificates for use with Ice client and servers. It supports commands for initialization the CA database, certification creation and export.
 
 Usage:
 ::
@@ -22,10 +46,8 @@ Usage:
     show     Show a given certificate
     export   Export a given certificate
 
-Initializing the certificate authority
---------------------------------------
 
-Usage:
+Usage of the ``init`` subcommand:
 
 ::
 
@@ -37,11 +59,7 @@ Usage:
     --overwrite    Overwrite the existing CA database
     --no-capass    Don't protect the CA with a password
 
-
-Creating a certifacte
----------------------
-
-Usage:
+Usage of the ``create`` subcommand:
 
 ::
 
@@ -55,10 +73,7 @@ Usage:
     --dns   Optional DNS subject alternative name field
 
 
-Listing the CA certificates
----------------------------
-
-Usage:
+Usage of the ``list`` subcommand:
 
 ::
 
@@ -66,11 +81,7 @@ Usage:
 
     List aliases for the certificates created with this CA.
 
-
-Showing certificate information
--------------------------------
-
-Usage:
+Usage of the ``show`` subcommand:
 
 ::
 
@@ -78,11 +89,7 @@ Usage:
 
     Print out the certificate associated to the given alias.
 
-
-Exporting a certificate
------------------------
-
-Usage:
+Usage of the ``export`` subcommand:
 
 ::
 
@@ -105,7 +112,7 @@ Usage:
 
 
 The IceCertUtils module
-=======================
+-----------------------
 
 Here's an example on how to create a certificate with the IceCertUtils module:
 
