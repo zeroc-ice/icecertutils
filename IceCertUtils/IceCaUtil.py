@@ -54,7 +54,7 @@ def parseArgs(script, min, max, shortopts, longopts, usage):
 
 def getCertificateAuthority(home, cafile, capass, verbose):
    if not os.path.exists(cafile):
-      print(sys.argv[0] + ": the CA it not initialized.")
+      print(sys.argv[0] + ": the CA is not initialized, run iceca init")
       sys.exit(1)
 
    if not capass:
@@ -146,7 +146,7 @@ def create(script, factory):
 
    opts, args = parseArgs(script, 1, 2, "", ["ip=", "dns="], "[--ip=<ip>] [--dns=<dns>] <alias> [<common-name>]\n"
    "\n"
-   "Creates and sign a certificate. A certificate is identified by its alias. If no\n"
+   "Creates and signs a certificate. A certificate is identified by its alias. If no\n"
    "common name is specified, the alias is used as the common name.\n"
    "\nOptions:\n"
    "--ip    Optional IP subject alternative name field\n"
@@ -154,7 +154,7 @@ def create(script, factory):
 
    alias = args[0]
    commonName = len(args) == 2 and args[1] or alias
-   cert = factory.create(alias, dn=commonName, ip=opts.get("ip", None), dns=opts.get("dns", None))
+   cert = factory().create(alias, dn=commonName, ip=opts.get("ip", None), dns=opts.get("dns", None))
    print("Created `%s' certificate `%s'" % (alias, str(cert)))
 
 def export(script, factory):
@@ -181,7 +181,7 @@ def export(script, factory):
    if not passphrase and os.path.splitext(os.path.basename(path))[1] in [".p12", ".jks", ".bks"]:
       passphrase = getpass.getpass("Enter the export passphrase:")
 
-   cert = factory.get(alias)
+   cert = factory().get(alias)
    if cert:
       cert.save(path, password=passphrase)
       print("Exported certificate `{alias}' to `{path}'".format(alias=alias, path=path))
@@ -194,7 +194,7 @@ def list(script, factory):
    "\n"
    "List aliases for the certificates created with this CA.\n")
 
-   print("Certificates: %s" % factory.list())
+   print("Certificates: %s" % factory().list())
 
 def show(script, factory):
 
@@ -203,7 +203,7 @@ def show(script, factory):
    "Print out the certificate associated to the given alias.\n")
 
    alias = args[0]
-   cert = factory.get(alias)
+   cert = factory().get(alias)
    if cert:
       print("Certificate `%s':\n%s" % (alias, cert.toText()))
    else:
@@ -263,7 +263,7 @@ def main():
            init(script, home, cafile, capass, verbose)
            sys.exit(0)
 
-        factory = getCertificateAuthority(home, cafile, capass, verbose)
+        factory = lambda: getCertificateAuthority(home, cafile, capass, verbose)
         if sys.argv[script] == "create":
            create(script, factory)
         elif sys.argv[script] == "export":
@@ -277,7 +277,7 @@ def main():
     except RuntimeError as err:
         print("Error: {0}".format(err))
 
-    sys.exit(0)
+    return 0
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

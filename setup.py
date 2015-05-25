@@ -11,14 +11,14 @@ except ImportError:
 import sys
 
 setup(
-  name = 'zeroc-ice-certutils',
+  name = 'zeroc-icecertutils',
   packages = ['IceCertUtils'],
-  version = '1.0b7',
-  description = 'ZeroC Ice Certificate Utilities',
+  version = '1.0.0',
+  description = 'ZeroC Ice certificate utilities',
   author = 'ZeroC, Inc.',
   author_email = 'info@zeroc.com',
   url = 'https://github.com/zeroc-ice/ice-certutils',
-  download_url = 'https://github.com/zeroc-ice/ice-certutils/tarball/1.0b',
+  download_url = 'https://github.com/zeroc-ice/ice-certutils/archive/v1.0.0.tar.gz',
   keywords = ['ice', 'certificate', 'ca', 'ssl'],
   install_requires = (["pyopenssl>=0.14"] if sys.platform == "win32" else []),
   license='BSD',
@@ -26,7 +26,7 @@ setup(
       'console_scripts' : ["iceca=IceCertUtils.IceCaUtil:main"],
   },
   classifiers = [
-        'Development Status :: 4 - Beta',
+        'Development Status :: 5 - Production/Stable',
         'Intended Audience :: Developers',
         'Topic :: Security',
         'Topic :: Software Development :: Libraries :: Python Modules',
