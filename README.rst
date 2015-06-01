@@ -29,7 +29,7 @@ Package Contents
 The iceca command line utility
 ------------------------------
 
-The iceca utility provides a small certificate authority to allow creating certificates for use with Ice client and servers. It supports commands for initialization the CA database, certification creation and export.
+The iceca utility provides a small certificate authority to allow creating certificates for use with Ice client and servers. It supports commands for initialization of the CA database, certification creation and export.
 
 Usage:
 ::
@@ -114,7 +114,7 @@ Usage of the ``export`` subcommand:
 The IceCertUtils module
 -----------------------
 
-Here's an example on how to create a certificate with the IceCertUtils module:
+Here's an example on how to create a server and client certificate with the IceCertUtils module:
 
 ::
 
