@@ -5,23 +5,7 @@ It relies on PyOpenSSL for the creation of certificates. The Java KeyStore files
 Installation
 ============
 
-We recommend using ``pip`` or ``easy_install`` to install this
-package.
-
-
-Home Page
-=========
-
-Visit `ZeroC's home page <https://zeroc.com>`_ for the latest news
-and information about Ice.
-
-
-Support
-=======
-
-Join us on our `user forums <https://zeroc.com/forums/forum.php>`_ if you have questions
-about this package.
-
+We recommend using ``pip`` or ``easy_install`` to install this package.
 
 Package Contents
 ================
