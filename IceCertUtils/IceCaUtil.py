@@ -154,7 +154,7 @@ def create(script, factory):
 
    alias = args[0]
    commonName = len(args) == 2 and args[1] or alias
-   cert = factory().create(alias, dn=commonName, ip=opts.get("ip", None), dns=opts.get("dns", None))
+   cert = factory().create(alias, cn=commonName, ip=opts.get("ip", None), dns=opts.get("dns", None))
    print("Created `%s' certificate `%s'" % (alias, str(cert)))
 
 def export(script, factory):

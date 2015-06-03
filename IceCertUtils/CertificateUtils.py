@@ -55,7 +55,9 @@ if subprocess.call("openssl version", shell=True, stdout=DEVNULL, stderr=DEVNULL
 pyopensslSupport = False
 try:
     import OpenSSL
-    pyopensslSupport = True
+    v = re.match(r"([0-9]+)\.([0-9]+)", OpenSSL.__version__)
+    # Require pyOpenSSL >= 0.13
+    pyopensslSupport = (int(v.group(1)) * 100 + int(v.group(2))) >= 13
 except:
     pass
 
@@ -267,6 +269,10 @@ def getDNAndAltName(alias, defaultDN, dn=None, altName=None, **kargs):
             elif k.lower() in kargs:
                 args[k] = kargs[k.lower()]
                 del kargs[k.lower()]
+
+            if k in args and args[k] is None:
+                del args[k]
+
         return (kargs, args)
 
     if not altName:
