@@ -10,17 +10,24 @@ except ImportError:
     from distutils.core import setup
 import sys
 
+hasOpenSSL=False
+try:
+    import OpenSSL
+    hasOpenSSL=True
+except:
+    pass
+
 setup(
   name = 'zeroc-icecertutils',
   packages = ['IceCertUtils'],
-  version = '1.0.0',
+  version = '1.0.1',
   description = 'ZeroC Ice certificate utilities',
   author = 'ZeroC, Inc.',
   author_email = 'info@zeroc.com',
-  url = 'https://github.com/zeroc-ice/ice-certutils',
-  download_url = 'https://github.com/zeroc-ice/ice-certutils/archive/v1.0.0.tar.gz',
+  url = 'https://github.com/zeroc-ice/icecertutils',
+  download_url = 'https://github.com/zeroc-ice/icecertutils/archive/v1.0.1.tar.gz',
   keywords = ['ice', 'certificate', 'ca', 'ssl'],
-  install_requires = (["pyopenssl>=0.14"] if sys.platform == "win32" else []),
+  install_requires = (["pyopenssl>=0.14"] if not hasOpenSSL or sys.platform == "win32" else []),
   license='BSD',
   entry_points = {
       'console_scripts' : ["iceca=IceCertUtils.IceCaUtil:main"],
