@@ -153,7 +153,6 @@ class KeyToolCertificateFactory(CertificateFactory):
             pem = cert.keyTool("gencert", ext, startdate = "{validity}d".format(validity=validity), validity=-validity,
                                stdin=req)
 
-
         # Concatenate the CA and signed certificate and re-import it into the keystore
         chain = []
         parent = self

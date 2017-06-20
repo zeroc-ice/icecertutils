@@ -30,7 +30,6 @@ Usage:
     show     Show a given certificate
     export   Export a given certificate
 
-
 Usage of the ``init`` subcommand:
 
 ::
@@ -55,7 +54,6 @@ Usage of the ``create`` subcommand:
     Options:
     --ip    Optional IP subject alternative name field
     --dns   Optional DNS subject alternative name field
-
 
 Usage of the ``list`` subcommand:
 
@@ -93,7 +91,6 @@ Usage of the ``export`` subcommand:
     Options:
     --password  The password to use for protecting the exported certificate
     --alias     The alias of the certificate to export
-
 
 The IceCertUtils module
 -----------------------
