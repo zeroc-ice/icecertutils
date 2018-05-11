@@ -17,15 +17,19 @@ try:
 except:
     pass
 
+with open('README.rst') as file:
+    long_description = file.read()
+
 setup(
   name = 'zeroc-icecertutils',
   packages = ['IceCertUtils'],
-  version = '1.0.2',
+  version = '1.0.2.1',
   description = 'ZeroC Ice certificate utilities',
+  long_description = long_description,
   author = 'ZeroC, Inc.',
   author_email = 'info@zeroc.com',
   url = 'https://github.com/zeroc-ice/icecertutils',
-  download_url = 'https://github.com/zeroc-ice/icecertutils/archive/v1.0.2.tar.gz',
+  download_url = 'https://github.com/zeroc-ice/icecertutils/archive/v1.0.2.1.tar.gz',
   keywords = ['ice', 'certificate', 'ca', 'ssl'],
   install_requires = (["pyopenssl>=0.14"] if not hasOpenSSL or sys.platform == "win32" else []),
   license='BSD',
