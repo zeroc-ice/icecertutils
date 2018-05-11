@@ -63,13 +63,13 @@ class TestFactory(unittest.TestCase):
         cert = factory.create("cert", cn="cnk", ou="ouk", o="ok", l="lk", st="stk", c="EN", emailAddress="eak")
 
         for (c, s) in [(factory.getCA(), "ca"), (cert, "k")]:
-            self.assertEquals(c.dn.CN, "cn%s" % s)
-            self.assertEquals(c.dn.OU, "ou%s" % s)
-            self.assertEquals(c.dn.O, "o%s" % s)
-            self.assertEquals(c.dn.L, "l%s" % s)
-            self.assertEquals(c.dn.ST, "st%s" % s)
-            self.assertEquals(c.dn.C, "EN" if s == "k" else "FR")
-            self.assertEquals(c.dn.emailAddress, "ea%s" % s)
+            self.assertEqual(c.dn.CN, "cn%s" % s)
+            self.assertEqual(c.dn.OU, "ou%s" % s)
+            self.assertEqual(c.dn.O, "o%s" % s)
+            self.assertEqual(c.dn.L, "l%s" % s)
+            self.assertEqual(c.dn.ST, "st%s" % s)
+            self.assertEqual(c.dn.C, "EN" if s == "k" else "FR")
+            self.assertEqual(c.dn.emailAddress, "ea%s" % s)
 
             txt = c.toText()
             self.assertTrue(txt.find("CN=cn%s" % s) > 0)
