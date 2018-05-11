@@ -128,7 +128,7 @@ def init(script, home, cafile, capass, verbose):
    if "no-capass" in opts:
       # If the user doesn't want a password, we save a random password under the CA home directory.
       capass = str(uuid.uuid4())
-      with open(os.path.join(home, "capass"), "w") as f: f.write(b(capass))
+      with open(os.path.join(home, "capass"), "wb") as f: f.write(b(capass))
    elif not capass:
       capass = ""
       while True:
