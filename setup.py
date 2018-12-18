@@ -1,6 +1,6 @@
 # **********************************************************************
 #
-# Copyright (c) 2015-2018-2018 ZeroC, Inc. All rights reserved.
+# Copyright (c) 2015-present-present ZeroC, Inc. All rights reserved.
 #
 # **********************************************************************
 
