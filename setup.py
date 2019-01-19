@@ -1,8 +1,6 @@
-# **********************************************************************
 #
 # Copyright (c) 2015-present-present ZeroC, Inc. All rights reserved.
 #
-# **********************************************************************
 
 try:
     from setuptools import setup

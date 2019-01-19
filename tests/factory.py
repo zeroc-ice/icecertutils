@@ -1,9 +1,7 @@
 #!/usr/bin/env python
-# **********************************************************************
 #
-# Copyright (c) 2015-present ZeroC, Inc. All rights reserved.
+# Copyright (c) ZeroC, Inc. All rights reserved.
 #
-# **********************************************************************
 
 import sys, os, shutil, unittest, tempfile
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
