@@ -104,9 +104,9 @@ class OpenSSLCertificateFactory(CertificateFactory):
         CertificateFactory.__init__(self, *args, **kargs)
 
         if self.keyalg == "dsa":
-            self.keysize = os.path.join(self.home, "dsaparams.pem")
-            if not os.path.exists(self.keysize):
-                self.run("openssl", "dsaparam", 1024, outform="PEM", out=self.keysize)
+            self.key = os.path.join(self.home, "dsaparams.pem")
+            if not os.path.exists(self.key):
+                self.run("openssl dsaparam  -outform=PEM -out={0} {1}".format(self.key, self.keysize))
 
         if not self.cacert.exists():
 
@@ -227,7 +227,7 @@ class OpenSSLCertificateFactory(CertificateFactory):
         # Key creation and certificate request parameters
         #
         if cmd == "req":
-            command += " -keyform PEM -keyout {cert.key} -newkey {this.keyalg}:{this.keysize}"
+            command += " -keyform PEM -keyout {cert.key} -newkey {this.keyalg}:{this.key}"
             if "-x509" in args:
                 command += " -out {cert.pem} -passout file:\"{this.passpath}\"" # CA self-signed certificate
             else:
