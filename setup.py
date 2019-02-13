@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2015-present-present ZeroC, Inc. All rights reserved.
+# Copyright (c) ZeroC, Inc. All rights reserved.
 #
 
 try:
@@ -21,13 +21,13 @@ with open('README.rst') as file:
 setup(
   name = 'zeroc-icecertutils',
   packages = ['IceCertUtils'],
-  version = '1.0.2.1',
+  version = '1.0.3',
   description = 'ZeroC Ice certificate utilities',
   long_description = long_description,
   author = 'ZeroC, Inc.',
   author_email = 'info@zeroc.com',
   url = 'https://github.com/zeroc-ice/icecertutils',
-  download_url = 'https://github.com/zeroc-ice/icecertutils/archive/v1.0.2.1.tar.gz',
+  download_url = 'https://github.com/zeroc-ice/icecertutils/archive/v1.0.3.tar.gz',
   keywords = ['ice', 'certificate', 'ca', 'ssl'],
   install_requires = (["pyopenssl>=0.14"] if not hasOpenSSL or sys.platform == "win32" else []),
   license='BSD',
@@ -51,6 +51,9 @@ setup(
         'Programming Language :: Python :: 3.2',
         'Programming Language :: Python :: 3.3',
         'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
   ],
   test_suite = "tests.factory",
 )
