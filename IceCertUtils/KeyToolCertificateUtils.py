@@ -133,6 +133,7 @@ class KeyToolCertificateFactory(CertificateFactory):
     def _generateChild(self, cert, serial, validity):
         subAltName = cert.getAlternativeName()
         issuerAltName = self.cacert.getAlternativeName()
+        extendedKeyUsage = cert.getExtendedKeyUsage()
 
         # Generate a certificate/key pair
         cert.keyTool("genkeypair")
@@ -142,7 +143,8 @@ class KeyToolCertificateFactory(CertificateFactory):
 
         ext = "-ext ku:c=dig,keyEnc" + \
               ((" -ext san=" + subAltName) if subAltName else "") + \
-              ((" -ext ian=" + issuerAltName) if issuerAltName else "")
+              ((" -ext ian=" + issuerAltName) if issuerAltName else "") + \
+              ((" -ext eku=" + extendedKeyUsage) if extendedKeyUsage else "")
 
         # Sign the certificate with the CA
         if validity is None or validity > 0:

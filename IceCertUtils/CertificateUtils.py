@@ -101,10 +101,11 @@ class DistinguishedName:
         return DistinguishedName(**args)
 
 class Certificate:
-    def __init__(self, parent, alias, dn=None, altName=None):
+    def __init__(self, parent, alias, dn=None, altName=None, extendedKeyUsage=None):
         self.parent = parent
         self.dn = dn
         self.altName = altName or {}
+        self.extendedKeyUsage = extendedKeyUsage
         self.alias = alias
         self.pem = None
 
@@ -251,6 +252,9 @@ class Certificate:
             items.append("{0}:{1}".format(k, v))
         return ",".join(items) if len(items) > 0 else None
 
+    def getExtendedKeyUsage(self):
+        return self.extendedKeyUsage
+
 defaultDN = DistinguishedName("ZeroC IceCertUtils CA", "Ice", "ZeroC, Inc.", "Jupiter", "Florida", "US",
                               emailAddress="info@zeroc.com")
 
@@ -303,7 +307,7 @@ class CertificateFactory:
         self.parent = parent;
 
         # Certificate generate parameters
-        self.validity = validity or (parent.validity if parent else 1825)
+        self.validity = validity or (parent.validity if parent else 825)
         self.keysize = keysize or (parent.keysize if parent else 2048)
         self.keyalg = keyalg or (parent.keyalg if parent else "rsa")
         self.sigalg = sigalg or (parent.sigalg if parent else "sha256")
@@ -342,7 +346,7 @@ class CertificateFactory:
     def __str__(self):
         return str(self.cacert)
 
-    def create(self, alias, serial=None, validity=None, *args, **kargs):
+    def create(self, alias, serial=None, validity=None, extendedKeyUsage=None, *args, **kargs):
         cert = self.get(alias)
         if cert:
             cert.destroy() # Remove previous certificate
@@ -351,7 +355,7 @@ class CertificateFactory:
         if len(args) > 0 or len(kargs) > 0:
             raise TypeError("unexpected arguments")
 
-        cert = self._createChild(alias, dn, altName)
+        cert = self._createChild(alias, dn, altName, extendedKeyUsage)
         self._generateChild(cert, serial, validity)
         self.certs[alias] = cert
         return cert

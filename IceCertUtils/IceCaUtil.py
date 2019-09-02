@@ -148,7 +148,8 @@ def create(script, factory):
    "common name is specified, the alias is used as the common name.\n"
    "\nOptions:\n"
    "--ip    Optional IP subject alternative name field\n"
-   "--dns   Optional DNS subject alternative name field\n")
+   "--dns   Optional DNS subject alternative name field\n"
+   "--eku   Optional Extended Key Usage\n")
 
    alias = args[0]
    commonName = len(args) == 2 and args[1] or alias

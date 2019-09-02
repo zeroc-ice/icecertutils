@@ -104,6 +104,26 @@ class TestFactory(unittest.TestCase):
 
         factory.destroy()
 
+    def test_extendedKeyUsage(self):
+        Factory = vars(IceCertUtils)[self.factory]
+        dn = IceCertUtils.DistinguishedName("CN")
+        factory = Factory(dn=dn)
+
+        cert = factory.create("cert", cn = "CERT", extendedKeyUsage="serverAuth")
+        txt = cert.toText()
+        self.assertTrue(txt.find("serverAuth") > 0 or txt.find("TLS Web Server Authentication") > 0)
+
+        cert = factory.create("cert", cn = "CERT", extendedKeyUsage="clientAuth")
+        txt = cert.toText()
+        self.assertTrue(txt.find("clientAuth") > 0 or txt.find("TLS Web Client Authentication") > 0)
+
+        cert = factory.create("cert", cn = "CERT", extendedKeyUsage="serverAuth,clientAuth")
+        txt = cert.toText()
+        self.assertTrue(txt.find("serverAuth") > 0 or txt.find("TLS Web Server Authentication") > 0)
+        self.assertTrue(txt.find("clientAuth") > 0 or txt.find("TLS Web Client Authentication") > 0)
+
+        factory.destroy()
+
     def test_persistent(self):
 
         if os.path.exists(self.home):

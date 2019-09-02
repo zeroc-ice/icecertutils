@@ -222,8 +222,12 @@ class PyOpenSSLCertificateFactory(CertificateFactory):
         if subAltName:
             extensions.append(crypto.X509Extension(b('subjectAltName'), False, b(subAltName)))
         if self.cacert.getAlternativeName():
-            extensions.append(crypto.X509Extension(b('issuerAltName'), False, b("issuer:copy"),
-                                                   issuer=self.cacert.x509))
+            extensions.append(crypto.X509Extension(b('issuerAltName'), False, b("issuer:copy"),issuer=self.cacert.x509))
+
+        extendedKeyUsage = cert.getExtendedKeyUsage()
+        if extendedKeyUsage:
+            extensions.append(crypto.X509Extension(b('extendedKeyUsage'),False,b(extendedKeyUsage)))
+
         x509.add_extensions(extensions)
 
         x509.sign(self.cacert.pkey, self.sigalg)

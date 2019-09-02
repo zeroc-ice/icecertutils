@@ -167,6 +167,9 @@ class OpenSSLCertificateFactory(CertificateFactory):
         altName = (("\nsubjectAltName = " + subAltName) if subAltName else "") + \
                   (("\nissuerAltName = " + issuerAltName) if issuerAltName else "")
 
+        extendedKeyUsage = cert.getExtendedKeyUsage()
+        extendedKeyUsage = ("extendedKeyUsage = " + extendedKeyUsage) if extendedKeyUsage else ""
+
         # Generate a certificate request
         req = cert.openSSL("req", config=
                            """
@@ -184,8 +187,9 @@ class OpenSSLCertificateFactory(CertificateFactory):
                      subjectKeyIdentifier = hash
                      authorityKeyIdentifier = keyid:always,issuer:always
                      keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+                     {extendedKeyUsage}
                      {altName}
-                     """.format(altName=altName))
+                     """.format(altName=altName, extendedKeyUsage=extendedKeyUsage))
 
         return cert
 
