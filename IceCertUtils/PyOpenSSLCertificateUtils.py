@@ -55,13 +55,15 @@ Validity:
    Not before: %s
    Not after: %s
 Subject: %s
+Subject Public Key Size: %s
 X509v3 extensions:""" % (self.x509.get_version() + 1,
                          self.x509.get_serial_number(),
                          self.x509.get_signature_algorithm(),
                          str(self.x509.get_issuer()).replace("<X509Name object '", "").replace("'>", ""),
                          datetime.datetime.strptime(d(self.x509.get_notBefore()), "%Y%m%d%H%M%SZ"),
                          datetime.datetime.strptime(d(self.x509.get_notAfter()), "%Y%m%d%H%M%SZ"),
-                         str(self.x509.get_subject()).replace("<X509Name object '", "").replace("'>", ""))
+                         str(self.x509.get_subject()).replace("<X509Name object '", "").replace("'>", ""),
+                         str(self.x509.get_pubkey().bits()))
         for i in range(0, self.x509.get_extension_count()):
             ext = self.x509.get_extension(i)
             s += "\n    " + d(ext.get_short_name()).strip() + ":\n        " + str(ext).replace("\n", "\n        ")

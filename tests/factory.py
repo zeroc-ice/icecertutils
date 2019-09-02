@@ -147,6 +147,17 @@ class TestFactory(unittest.TestCase):
         self.assertEqual(c1, c2)
         f.destroy()
 
+    def test_params(self):
+
+        f = vars(IceCertUtils)[self.factory](validity=10, keysize=3192, sigalg="sha512", keyalg="rsa")
+        s = f.getCA().toText()
+        self.assertTrue(s.find("sha512") > 0 or s.find("SHA512"))
+        self.assertTrue(s.find("3192") > 0)
+
+        f = vars(IceCertUtils)[self.factory](keyalg="dsa")
+        s = f.getCA().toText()
+        self.assertTrue(s.find("dsa") > 0 or s.find("DSA") > 0)
+
 class PyOpenSSLTestFactory(TestFactory):
 
     def setUp(self):
