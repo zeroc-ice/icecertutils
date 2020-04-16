@@ -100,7 +100,8 @@ class KeyToolCertificateFactory(CertificateFactory):
             issuerAltName = self.parent.cacert.getAlternativeName() if self.parent else None
             ext = "-ext bc:c" + \
                   ((" -ext san=" + subAltName) if subAltName else "") + \
-                  ((" -ext ian=" + issuerAltName) if issuerAltName else "")
+                  ((" -ext ian=" + issuerAltName) if issuerAltName else "")\
+                  ((" -ext eku=" + self.extendedKeyUsage) if  self.extendedKeyUsage else "")
 
             if not self.parent:
                 cacert.keyTool("genkeypair", ext, validity=self.validity, sigalg=self.sigalg)
