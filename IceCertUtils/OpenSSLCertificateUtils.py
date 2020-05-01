@@ -116,6 +116,7 @@ class OpenSSLCertificateFactory(CertificateFactory):
             issuerAltName = self.parent.cacert.getAlternativeName() if self.parent else None
             altName = (("\nsubjectAltName = " + subAltName) if subAltName else "") + \
                       (("\nissuerAltName = " + issuerAltName) if issuerAltName else "")
+            extendedKeyUsage = ("extendedKeyUsage = " + self.extendedKeyUsage) if self.extendedKeyUsage else ""
 
             cacert = self.cacert
             if not self.parent:
@@ -131,7 +132,8 @@ class OpenSSLCertificateFactory(CertificateFactory):
                                authorityKeyIdentifier = keyid:always,issuer:always
                                {altName}
                                {dn}
-                               """.format(dn=toDNSection(cacert.dn),altName=altName))
+                               {extendedKeyUsage}
+                               """.format(dn=toDNSection(cacert.dn),altName=altName,extendedKeyUsage=extendedKeyUsage))
             else:
                 self.cacert = self.parent.cacert
                 req = cacert.openSSL("req", config=
@@ -151,7 +153,8 @@ class OpenSSLCertificateFactory(CertificateFactory):
                                subjectKeyIdentifier = hash
                                authorityKeyIdentifier = keyid:always,issuer:always
                                {altName}
-                               """.format(altName=altName))
+                               {extendedKeyUsage}
+                               """.format(altName=altName, extendedKeyUsage=extendedKeyUsage))
 
             self.cacert = cacert
 

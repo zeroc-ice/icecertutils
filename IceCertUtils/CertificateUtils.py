@@ -298,13 +298,14 @@ def getDNAndAltName(alias, defaultDN, dn=None, altName=None, **kargs):
 
 class CertificateFactory:
     def __init__(self, home=None, debug=None, validity=None, keysize=None, keyalg=None, sigalg=None, password=None,
-                 parent=None, *args, **kargs):
+                 parent=None, extendedKeyUsage=None, *args, **kargs):
 
         (kargs, dn, altName) = getDNAndAltName("ca", defaultDN, **kargs)
         if len(kargs) > 0:
             raise TypeError("unexpected arguments")
 
-        self.parent = parent;
+        self.parent = parent
+        self.extendedKeyUsage = extendedKeyUsage
 
         # Certificate generate parameters
         self.validity = validity or (parent.validity if parent else 825)

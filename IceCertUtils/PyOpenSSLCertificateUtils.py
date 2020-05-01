@@ -157,8 +157,11 @@ class PyOpenSSLCertificateFactory(CertificateFactory):
             x509.set_pubkey(req.get_pubkey())
             extensions = [
                 crypto.X509Extension(b('basicConstraints'), False, b('CA:true')),
-                crypto.X509Extension(b('subjectKeyIdentifier'), False, b('hash'), subject=x509),
+                crypto.X509Extension(b('subjectKeyIdentifier'), False, b('hash'), subject=x509)
             ]
+
+            if self.extendedKeyUsage:
+                extensions.append(crypto.X509Extension(b('extendedKeyUsage'), False, b(self.extendedKeyUsage)))
 
             subjectAltName = self.cacert.getAlternativeName()
             if subjectAltName:
