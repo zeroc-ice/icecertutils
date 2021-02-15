@@ -249,7 +249,11 @@ class Certificate:
     def getAlternativeName(self):
         items = []
         for k, v in self.altName.items():
-            items.append("{0}:{1}".format(k, v))
+            if isinstance(v, str):
+                items.append("{0}:{1}".format(k, v))
+            else:
+                for v1 in v:
+                    items.append("{0}:{1}".format(k, v1))
         return ",".join(items) if len(items) > 0 else None
 
     def getExtendedKeyUsage(self):
