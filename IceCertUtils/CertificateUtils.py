@@ -398,7 +398,7 @@ class CertificateFactory:
             authorityInfoAccess=None,
             *args,
             **kargs):
-        factory = self.getIntermediateFactory(alias, extendedKeyUsage, crlDistributionPoints, authorityInfoAccess)
+        factory = self.getIntermediateFactory(alias)
         if factory:
             factory.destroy(force = True)
 
@@ -419,26 +419,8 @@ class CertificateFactory:
         self.factories[alias] = factory
         return factory
 
-    def getIntermediateFactory(
-            self,
-            alias,
-            extendedKeyUsage=None,
-            crlDistributionPoints=None,
-            authorityInfoAccess=None):
-        if alias in self.factories:
-            return self.factories[alias]
-
-        home = os.path.join(self.home, alias)
-        if not os.path.isdir(home):
-            return None
-
-        factory = self._createFactory(home=home,
-                                      parent=self,
-                                      extendedKeyUsage=extendedKeyUsage,
-                                      crlDistributionPoints=crlDistributionPoints,
-                                      authorityInfoAccess=authorityInfoAccess)
-        self.factories[alias] = factory
-        return factory
+    def getIntermediateFactory(self, alias):
+        return self.factories[alias] if alias in self.factories else None
 
     def destroy(self, force=False):
         if self.rmHome:
