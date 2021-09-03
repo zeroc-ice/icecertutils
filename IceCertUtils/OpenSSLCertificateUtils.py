@@ -118,6 +118,7 @@ class OpenSSLCertificateFactory(CertificateFactory):
                       (("\nissuerAltName = " + issuerAltName) if issuerAltName else "")
             extendedKeyUsage = ("extendedKeyUsage = " + self.extendedKeyUsage) if self.extendedKeyUsage else ""
 
+
             cacert = self.cacert
             if not self.parent:
                 cacert.openSSL("req", "-x509", days = self.validity, config =
@@ -130,11 +131,22 @@ class OpenSSLCertificateFactory(CertificateFactory):
                                basicConstraints = CA:true
                                subjectKeyIdentifier = hash
                                authorityKeyIdentifier = keyid:always,issuer:always
+                               keyUsage = digitalSignature,keyCertSign,cRLSign
                                {altName}
-                               {dn}
                                {extendedKeyUsage}
-                               """.format(dn=toDNSection(cacert.dn),altName=altName,extendedKeyUsage=extendedKeyUsage))
+                               {dn}
+                               """.format(dn=toDNSection(cacert.dn),
+                                          altName=altName,
+                                          extendedKeyUsage=extendedKeyUsage))
             else:
+                crlDistributionPoints = ""
+                if self.parent.crlDistributionPoints:
+                    crlDistributionPoints = "crlDistributionPoints = URI:" + self.parent.crlDistributionPoints
+
+                authorityInfoAccess = ""
+                if self.parent.authorityInfoAccess:
+                    authorityInfoAccess = "authorityInfoAccess = OCSP;URI:" + self.parent.authorityInfoAccess
+
                 self.cacert = self.parent.cacert
                 req = cacert.openSSL("req", config=
                                      """
@@ -150,11 +162,17 @@ class OpenSSLCertificateFactory(CertificateFactory):
                                """
                                [ ext ]
                                basicConstraints = CA:true
+                               keyUsage = digitalSignature,keyCertSign,cRLSign
                                subjectKeyIdentifier = hash
                                authorityKeyIdentifier = keyid:always,issuer:always
-                               {altName}
                                {extendedKeyUsage}
-                               """.format(altName=altName, extendedKeyUsage=extendedKeyUsage))
+                               {crlDistributionPoints}
+                               {authorityInfoAccess}
+                               {altName}
+                               """.format(altName=altName,
+                                          extendedKeyUsage=extendedKeyUsage,
+                                          crlDistributionPoints=crlDistributionPoints,
+                                          authorityInfoAccess=authorityInfoAccess))
 
             self.cacert = cacert
 
@@ -172,6 +190,14 @@ class OpenSSLCertificateFactory(CertificateFactory):
 
         extendedKeyUsage = cert.getExtendedKeyUsage()
         extendedKeyUsage = ("extendedKeyUsage = " + extendedKeyUsage) if extendedKeyUsage else ""
+
+        crlDistributionPoints = ""
+        if self.crlDistributionPoints:
+            crlDistributionPoints = "crlDistributionPoints = URI:" + self.crlDistributionPoints
+
+        authorityInfoAccess = ""
+        if self.authorityInfoAccess:
+            authorityInfoAccess = "authorityInfoAccess = OCSP;URI:" + self.authorityInfoAccess
 
         # Generate a certificate request
         req = cert.openSSL("req", config=
@@ -191,8 +217,13 @@ class OpenSSLCertificateFactory(CertificateFactory):
                      authorityKeyIdentifier = keyid:always,issuer:always
                      keyUsage = nonRepudiation, digitalSignature, keyEncipherment
                      {extendedKeyUsage}
+                     {crlDistributionPoints}
+                     {authorityInfoAccess}
                      {altName}
-                     """.format(altName=altName, extendedKeyUsage=extendedKeyUsage))
+                     """.format(altName=altName,
+                                extendedKeyUsage=extendedKeyUsage,
+                                crlDistributionPoints=crlDistributionPoints,
+                                authorityInfoAccess=authorityInfoAccess))
 
         return cert
 

@@ -101,11 +101,20 @@ class DistinguishedName:
         return DistinguishedName(**args)
 
 class Certificate:
-    def __init__(self, parent, alias, dn=None, altName=None, extendedKeyUsage=None):
+    def __init__(self,
+                 parent,
+                 alias,
+                 dn=None,
+                 altName=None,
+                 extendedKeyUsage=None,
+                 crlDistributionPoints=None,
+                 authorityInfoAcces=None):
         self.parent = parent
         self.dn = dn
         self.altName = altName or {}
         self.extendedKeyUsage = extendedKeyUsage
+        self.crlDistributionPoints = crlDistributionPoints
+        self.authorityInfoAcces = authorityInfoAcces
         self.alias = alias
         self.pem = None
 
@@ -302,7 +311,8 @@ def getDNAndAltName(alias, defaultDN, dn=None, altName=None, **kargs):
 
 class CertificateFactory:
     def __init__(self, home=None, debug=None, validity=None, keysize=None, keyalg=None, sigalg=None, password=None,
-                 parent=None, extendedKeyUsage=None, *args, **kargs):
+                 parent=None, extendedKeyUsage=None, crlDistributionPoints=None, authorityInfoAccess=None,
+                 *args, **kargs):
 
         (kargs, dn, altName) = getDNAndAltName("ca", defaultDN, **kargs)
         if len(kargs) > 0:
@@ -316,6 +326,8 @@ class CertificateFactory:
         self.keysize = keysize or (parent.keysize if parent else 2048)
         self.keyalg = keyalg or (parent.keyalg if parent else "rsa")
         self.sigalg = sigalg or (parent.sigalg if parent else "sha256")
+        self.crlDistributionPoints=crlDistributionPoints
+        self.authorityInfoAccess=authorityInfoAccess
 
         # Temporary directory for storing intermediate files
         self.rmHome = home is None
@@ -378,8 +390,15 @@ class CertificateFactory:
     def getCA(self):
         return self.cacert
 
-    def createIntermediateFactory(self, alias, *args, **kargs):
-        factory = self.getIntermediateFactory(alias)
+    def createIntermediateFactory(
+            self,
+            alias,
+            extendedKeyUsage=None,
+            crlDistributionPoints=None,
+            authorityInfoAccess=None,
+            *args,
+            **kargs):
+        factory = self.getIntermediateFactory(alias, extendedKeyUsage, crlDistributionPoints, authorityInfoAccess)
         if factory:
             factory.destroy(force = True)
 
@@ -390,11 +409,22 @@ class CertificateFactory:
         if len(args) > 0 or len(kargs) > 0:
             raise TypeError("unexpected arguments")
 
-        factory = self._createFactory(home = home, dn = dn, altName=altName, parent = self)
+        factory = self._createFactory(home=home,
+                                      dn=dn,
+                                      altName=altName,
+                                      parent=self,
+                                      extendedKeyUsage=extendedKeyUsage,
+                                      crlDistributionPoints=crlDistributionPoints,
+                                      authorityInfoAccess=authorityInfoAccess)
         self.factories[alias] = factory
         return factory
 
-    def getIntermediateFactory(self, alias):
+    def getIntermediateFactory(
+            self,
+            alias,
+            extendedKeyUsage=None,
+            crlDistributionPoints=None,
+            authorityInfoAccess=None):
         if alias in self.factories:
             return self.factories[alias]
 
@@ -402,7 +432,11 @@ class CertificateFactory:
         if not os.path.isdir(home):
             return None
 
-        factory = self._createFactory(home = home, parent = self)
+        factory = self._createFactory(home=home,
+                                      parent=self,
+                                      extendedKeyUsage=extendedKeyUsage,
+                                      crlDistributionPoints=crlDistributionPoints,
+                                      authorityInfoAccess=authorityInfoAccess)
         self.factories[alias] = factory
         return factory
 
