@@ -420,7 +420,18 @@ class CertificateFactory:
         return factory
 
     def getIntermediateFactory(self, alias):
-        return self.factories[alias] if alias in self.factories else None
+        if alias in self.factories:
+            return self.factories[alias]
+
+        home = os.path.join(self.home, alias)
+        if not os.path.isdir(home):
+            return None
+
+        # TODO some attributes are not loaded when the factory exist
+        # extendedKeyUsage, crlDistributionPoints, authorityInfoAccess
+        factory = self._createFactory(home = home, parent = self)
+        self.factories[alias] = factory
+        return factory
 
     def destroy(self, force=False):
         if self.rmHome:
