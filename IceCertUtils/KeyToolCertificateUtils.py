@@ -110,8 +110,15 @@ class KeyToolCertificateFactory(CertificateFactory):
                 if self.parent.crlDistributionPoints:
                     ext += " -ext crl=URI:" + self.parent.crlDistributionPoints
 
-                if self.parent.authorityInfoAccess:
-                    ext += " -ext aia=OCSP:URI:" + self.parent.authorityInfoAccess
+                aia = []
+                if self.parent.ocspResponder:
+                    aia.append("OCSP:URI:" + self.parent.ocspResponder)
+
+                if self.parent.caIssuers:
+                    aia.append("caIssuers:URI:" + self.parent.caIssuers)
+
+                if len(aia) > 0:
+                    ext += " -ext aia=" + ",".join(aia)
 
                 self.cacert = self.parent.cacert
                 cacert.keyTool("genkeypair")
@@ -157,8 +164,15 @@ class KeyToolCertificateFactory(CertificateFactory):
         if self.crlDistributionPoints:
             ext += " -ext crl=URI:" + self.crlDistributionPoints
 
-        if self.authorityInfoAccess:
-            ext += " -ext aia=OCSP:URI:" + self.authorityInfoAccess
+        aia = []
+        if self.ocspResponder:
+            aia.append("OCSP:URI:" + self.ocspResponder)
+
+        if self.caIssuers:
+            aia.append("caIssuers:URI:" + self.caIssuers)
+
+        if len(aia) > 0:
+            ext += " -ext aia=" + ",".join(aia)
 
         # Sign the certificate with the CA
         if validity is None or validity > 0:

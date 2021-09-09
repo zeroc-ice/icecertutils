@@ -141,11 +141,34 @@ class OpenSSLCertificateFactory(CertificateFactory):
             else:
                 crlDistributionPoints = ""
                 if self.parent.crlDistributionPoints:
-                    crlDistributionPoints = "crlDistributionPoints = URI:" + self.parent.crlDistributionPoints
+                    crlDistributionPoints = "crlDistributionPoints = URI:{}".format(self.parent.crlDistributionPoints)
 
                 authorityInfoAccess = ""
-                if self.parent.authorityInfoAccess:
-                    authorityInfoAccess = "authorityInfoAccess = OCSP;URI:" + self.parent.authorityInfoAccess
+                if self.parent.ocspResponder:
+                    authorityInfoAccess += "OCSP;URI.0 = {}\n".format(self.parent.ocspResponder)
+                if self.parent.caIssuers:
+                    authorityInfoAccess += "caIssuers;URI.0 = {}".format(self.parent.caIssuers)
+
+
+                extfile = """
+                [ ext ]
+                basicConstraints = CA:true
+                keyUsage = digitalSignature,keyCertSign,cRLSign
+                subjectKeyIdentifier = hash
+                authorityKeyIdentifier = keyid:always,issuer:always
+                {extendedKeyUsage}
+                {crlDistributionPoints}
+                {altName}
+                """.format(altName=altName,
+                           extendedKeyUsage=extendedKeyUsage,
+                           crlDistributionPoints=crlDistributionPoints)
+
+                if authorityInfoAccess != "":
+                    extfile += """
+                    authorityInfoAccess = @authority_info_access
+                    [ authority_info_access ]
+                    {authorityInfoAccess}
+                    """.format(authorityInfoAccess=authorityInfoAccess)
 
                 self.cacert = self.parent.cacert
                 req = cacert.openSSL("req", config=
@@ -157,23 +180,12 @@ class OpenSSLCertificateFactory(CertificateFactory):
                                      """.format(dn=toDNSection(cacert.dn)))
 
                 # Sign the certificate
-                cacert.openSSL("x509", "-req", set_serial=random.getrandbits(64), stdin=req, days = self.validity,
-                               extfile=
-                               """
-                               [ ext ]
-                               basicConstraints = CA:true
-                               keyUsage = digitalSignature,keyCertSign,cRLSign
-                               subjectKeyIdentifier = hash
-                               authorityKeyIdentifier = keyid:always,issuer:always
-                               {extendedKeyUsage}
-                               {crlDistributionPoints}
-                               {authorityInfoAccess}
-                               {altName}
-                               """.format(altName=altName,
-                                          extendedKeyUsage=extendedKeyUsage,
-                                          crlDistributionPoints=crlDistributionPoints,
-                                          authorityInfoAccess=authorityInfoAccess))
-
+                cacert.openSSL("x509",
+                               "-req",
+                               set_serial=random.getrandbits(64),
+                               stdin=req,
+                               days=self.validity,
+                               extfile=extfile)
             self.cacert = cacert
 
     def _createFactory(self, *args, **kargs):
@@ -196,8 +208,27 @@ class OpenSSLCertificateFactory(CertificateFactory):
             crlDistributionPoints = "crlDistributionPoints = URI:" + self.crlDistributionPoints
 
         authorityInfoAccess = ""
-        if self.authorityInfoAccess:
-            authorityInfoAccess = "authorityInfoAccess = OCSP;URI:" + self.authorityInfoAccess
+        if self.ocspResponder:
+            authorityInfoAccess += "OCSP;URI.0 = {}\n".format(self.ocspResponder)
+        if self.caIssuers:
+            authorityInfoAccess += "caIssuers;URI.0 = {}".format(self.caIssuers)
+
+        extfile ="""
+        [ ext ]
+        subjectKeyIdentifier = hash
+        authorityKeyIdentifier = keyid:always,issuer:always
+        keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+        {extendedKeyUsage}
+        {crlDistributionPoints}
+        {altName}
+        """.format(extendedKeyUsage=extendedKeyUsage, crlDistributionPoints=crlDistributionPoints, altName=altName)
+
+        if authorityInfoAccess != "":
+            extfile += """
+            authorityInfoAccess = @authority_info_access
+            [ authority_info_access ]
+            {authorityInfoAccess}
+            """.format(authorityInfoAccess=authorityInfoAccess)
 
         # Generate a certificate request
         req = cert.openSSL("req", config=
@@ -209,21 +240,12 @@ class OpenSSLCertificateFactory(CertificateFactory):
                            """.format(dn=toDNSection(cert.dn)))
 
         # Sign the certificate
-        cert.openSSL("x509", "-req", set_serial=serial or random.getrandbits(64), stdin=req,
-                     days = validity or self.validity, extfile=
-                     """
-                     [ ext ]
-                     subjectKeyIdentifier = hash
-                     authorityKeyIdentifier = keyid:always,issuer:always
-                     keyUsage = nonRepudiation, digitalSignature, keyEncipherment
-                     {extendedKeyUsage}
-                     {crlDistributionPoints}
-                     {authorityInfoAccess}
-                     {altName}
-                     """.format(altName=altName,
-                                extendedKeyUsage=extendedKeyUsage,
-                                crlDistributionPoints=crlDistributionPoints,
-                                authorityInfoAccess=authorityInfoAccess))
+        cert.openSSL("x509",
+                     "-req",
+                     set_serial=serial or random.getrandbits(64),
+                     stdin=req,
+                     days=validity or self.validity,
+                     extfile=extfile)
 
         return cert
 

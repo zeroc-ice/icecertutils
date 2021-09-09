@@ -170,10 +170,16 @@ class PyOpenSSLCertificateFactory(CertificateFactory):
                                                            False,
                                                            b("URI:" + self.parent.crlDistributionPoints)))
 
-                if self.parent.authorityInfoAccess:
-                    extensions.append(crypto.X509Extension(b('authorityInfoAccess'),
-                                                           False,
-                                                           b("OCSP;URI:" + self.parent.authorityInfoAccess)))
+                authorityInfoAccess = []
+                if self.parent.ocspResponder:
+                    authorityInfoAccess.append("OCSP;URI:{}".format(self.parent.ocspResponder))
+
+                if self.parent.caIssuers:
+                    authorityInfoAccess.append("caIssuers;URI:{}".format(self.parent.caIssuers))
+
+                if len(authorityInfoAccess) > 0:
+                    authorityInfoAccess = bytes(",".join(authorityInfoAccess), 'utf-8')
+                    extensions.append(crypto.X509Extension(b('authorityInfoAccess'), False, authorityInfoAccess))
 
             subjectAltName = self.cacert.getAlternativeName()
             if subjectAltName:
@@ -239,10 +245,17 @@ class PyOpenSSLCertificateFactory(CertificateFactory):
                                                    False,
                                                    b("URI:" + self.crlDistributionPoints)))
 
-        if self.authorityInfoAccess:
-            extensions.append(crypto.X509Extension(b('authorityInfoAccess'),
-                                                   False,
-                                                   b("OCSP;URI:" + self.authorityInfoAccess)))
+        authorityInfoAccess = []
+        if self.ocspResponder:
+            authorityInfoAccess.append("OCSP;URI:{}".format(self.ocspResponder))
+
+        if self.caIssuers:
+            authorityInfoAccess.append("caIssuers;URI:{}".format(self.caIssuers))
+
+        if len(authorityInfoAccess) > 0:
+            authorityInfoAccess = bytes(",".join(authorityInfoAccess), 'utf-8')
+            extensions.append(crypto.X509Extension(b('authorityInfoAccess'), False, authorityInfoAccess))
+
         subAltName = cert.getAlternativeName()
         if subAltName:
             extensions.append(crypto.X509Extension(b('subjectAltName'), False, b(subAltName)))

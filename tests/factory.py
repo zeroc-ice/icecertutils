@@ -224,6 +224,12 @@ class TestFactory(unittest.TestCase):
             self.assertTrue(txt.find("X509v3 CRL Distribution Points") > 0 or txt.find("crlDistributionPoints") > 0)
             self.assertTrue(txt.find("http://ca2.zeroc.com/crl.pem") > 0)
 
+            ca2 = factory.getIntermediateFactory("ca2")
+            cert = ca2.create("cert1", cn = "CERT", ip="127.0.0.1")
+            txt = cert.toText()
+            self.assertTrue(txt.find("X509v3 CRL Distribution Points") > 0 or txt.find("crlDistributionPoints") > 0)
+            self.assertTrue(txt.find("http://ca2.zeroc.com/crl.pem") > 0)
+
         factory.destroy()
 
     def test_authorityInfoAccess(self):
@@ -232,7 +238,8 @@ class TestFactory(unittest.TestCase):
         factory = Factory(dn=dn,
                           ip="127.0.0.1",
                           dns="ca.zeroc.com",
-                          authorityInfoAccess="http://ca.zeroc.com/ocsp")
+                          ocspResponder="http://ca.zeroc.com/ocsp",
+                          caIssuers="http://ca.zeroc.com/ca.pem")
         cert = factory.create("cert", cn = "CERT", ip="127.0.0.1")
 
         txt = factory.getCA().toText()
@@ -240,25 +247,40 @@ class TestFactory(unittest.TestCase):
                          txt.find("authorityInfoAccess") > 0 or
                          txt.find("AuthorityInfoAccess") > 0)
         self.assertFalse(txt.find("http://ca.zeroc.com/ocsp") > 0)
+        self.assertFalse(txt.find("http://ca.zeroc.com/ca.pem") > 0)
 
         txt = cert.toText()
         self.assertTrue(txt.find("Authority Information Access") > 0 or
                         txt.find("authorityInfoAccess") > 0 or
                         txt.find("AuthorityInfoAccess") > 0)
         self.assertTrue(txt.find("http://ca.zeroc.com/ocsp") > 0)
+        self.assertTrue(txt.find("http://ca.zeroc.com/ca.pem") > 0)
 
         if self.factory != "KeyToolCertificateFactory":
 
-            ca2 = factory.createIntermediateFactory("ca2", authorityInfoAccess="http://ca2.zeroc.com/ocsp")
+            ca2 = factory.createIntermediateFactory(
+                "ca2",
+                ocspResponder="http://ca2.zeroc.com/ocsp",
+                caIssuers="http://ca2.zeroc.com/ca2.pem")
             cert = ca2.create("cert", cn = "CERT", ip="127.0.0.1")
 
             txt = ca2.getCA().toText()
             self.assertTrue(txt.find("Authority Information Access") or txt.find("authorityInfoAccess") > 0)
             self.assertTrue(txt.find("http://ca.zeroc.com/ocsp") > 0)
+            self.assertTrue(txt.find("http://ca.zeroc.com/ca.pem") > 0)
 
             txt = cert.toText()
             self.assertTrue(txt.find("Authority Information Access") > 0 or txt.find("authorityInfoAccess") > 0)
             self.assertTrue(txt.find("http://ca2.zeroc.com/ocsp") > 0)
+            self.assertTrue(txt.find("http://ca2.zeroc.com/ca2.pem") > 0)
+
+
+            ca2 = factory.getIntermediateFactory("ca2")
+            cert = ca2.create("cert1", cn = "CERT", ip="127.0.0.1")
+            txt = cert.toText()
+            self.assertTrue(txt.find("Authority Information Access") > 0 or txt.find("authorityInfoAccess") > 0)
+            self.assertTrue(txt.find("http://ca2.zeroc.com/ocsp") > 0)
+            self.assertTrue(txt.find("http://ca2.zeroc.com/ca2.pem") > 0)
 
         factory.destroy()
 

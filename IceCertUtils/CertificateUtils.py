@@ -3,7 +3,7 @@
 # Copyright (c) ZeroC, Inc. All rights reserved.
 #
 
-import sys, os, shutil, subprocess, tempfile, random, re, atexit
+import sys, os, shutil, subprocess, tempfile, random, re, atexit, json
 
 try:
     from subprocess import DEVNULL
@@ -311,7 +311,7 @@ def getDNAndAltName(alias, defaultDN, dn=None, altName=None, **kargs):
 
 class CertificateFactory:
     def __init__(self, home=None, debug=None, validity=None, keysize=None, keyalg=None, sigalg=None, password=None,
-                 parent=None, extendedKeyUsage=None, crlDistributionPoints=None, authorityInfoAccess=None,
+                 parent=None, extendedKeyUsage=None, crlDistributionPoints=None, ocspResponder=None, caIssuers=None,
                  *args, **kargs):
 
         (kargs, dn, altName) = getDNAndAltName("ca", defaultDN, **kargs)
@@ -321,17 +321,46 @@ class CertificateFactory:
         self.parent = parent
         self.extendedKeyUsage = extendedKeyUsage
 
-        # Certificate generate parameters
-        self.validity = validity or (parent.validity if parent else 825)
-        self.keysize = keysize or (parent.keysize if parent else 2048)
-        self.keyalg = keyalg or (parent.keyalg if parent else "rsa")
-        self.sigalg = sigalg or (parent.sigalg if parent else "sha256")
-        self.crlDistributionPoints=crlDistributionPoints
-        self.authorityInfoAccess=authorityInfoAccess
-
         # Temporary directory for storing intermediate files
         self.rmHome = home is None
         self.home = home or tempfile.mkdtemp();
+
+        # Certificate generate parameters
+        if os.path.exists(os.path.join(self.home, "ca.settings.json")):
+            with open(os.path.join(self.home, "ca.settings.json"), 'r') as f:
+                settings = json.load(f)
+                self.validity = int(settings["validity"])
+                self.keysize = int(settings["keysize"])
+                self.keyalg = settings["keyalg"]
+                self.sigalg = settings["sigalg"]
+                self.crlDistributionPoints = settings.get("crlDistributionPoints")
+                self.ocspResponder = settings.get("ocpResponder")
+                self.caIssuers = settings.get("caIssuers")
+        else:
+            self.validity = validity or (parent.validity if parent else 825)
+            self.keysize = keysize or (parent.keysize if parent else 2048)
+            self.keyalg = keyalg or (parent.keyalg if parent else "rsa")
+            self.sigalg = sigalg or (parent.sigalg if parent else "sha256")
+            self.crlDistributionPoints=crlDistributionPoints
+            self.ocspResponder=ocspResponder
+            self.caIssuers=caIssuers
+
+            settings = { "validity" : self.validity,
+                         "keysize" : self.keysize,
+                         "keyalg" : self.keyalg,
+                         "sigalg" : self.sigalg}
+
+            if self.crlDistributionPoints:
+                settings["crlDistributionPoints"] = self.crlDistributionPoints
+
+            if self.ocspResponder:
+                settings["ocspResponder"] = self.ocspResponder
+
+            if self.caIssuers:
+                settings["caIssuers"] = self.caIssuers
+
+            with open(os.path.join(self.home, "ca.settings.json"), 'w') as f:
+                json.dump(settings, f)
 
         self.certs = {}
         self.factories = {}
@@ -395,7 +424,8 @@ class CertificateFactory:
             alias,
             extendedKeyUsage=None,
             crlDistributionPoints=None,
-            authorityInfoAccess=None,
+            ocspResponder=None,
+            caIssuers=None,
             *args,
             **kargs):
         factory = self.getIntermediateFactory(alias)
@@ -415,7 +445,8 @@ class CertificateFactory:
                                       parent=self,
                                       extendedKeyUsage=extendedKeyUsage,
                                       crlDistributionPoints=crlDistributionPoints,
-                                      authorityInfoAccess=authorityInfoAccess)
+                                      ocspResponder=ocspResponder,
+                                      caIssuers=caIssuers)
         self.factories[alias] = factory
         return factory
 
@@ -427,8 +458,6 @@ class CertificateFactory:
         if not os.path.isdir(home):
             return None
 
-        # TODO some attributes are not loaded when the factory exist
-        # extendedKeyUsage, crlDistributionPoints, authorityInfoAccess
         factory = self._createFactory(home = home, parent = self)
         self.factories[alias] = factory
         return factory
@@ -438,6 +467,8 @@ class CertificateFactory:
             # Cleanup temporary directory
             shutil.rmtree(self.home)
         elif force:
+            if os.path.exists(os.path.join(self.home, "ca.settings.json")):
+                os.remove(os.path.join(self.home, "ca.settings.json"))
             if os.path.exists(self.passpath):
                 os.remove(self.passpath)
             for (a,c) in self.certs.items():
