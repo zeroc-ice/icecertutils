@@ -157,11 +157,29 @@ class PyOpenSSLCertificateFactory(CertificateFactory):
             x509.set_pubkey(req.get_pubkey())
             extensions = [
                 crypto.X509Extension(b('basicConstraints'), False, b('CA:true')),
-                crypto.X509Extension(b('subjectKeyIdentifier'), False, b('hash'), subject=x509)
+                crypto.X509Extension(b('subjectKeyIdentifier'), False, b('hash'), subject=x509),
+                crypto.X509Extension(b('keyUsage'), False, b('digitalSignature,keyCertSign,cRLSign'))
             ]
 
             if self.extendedKeyUsage:
                 extensions.append(crypto.X509Extension(b('extendedKeyUsage'), False, b(self.extendedKeyUsage)))
+
+            if self.parent:
+                if self.parent.crlDistributionPoints:
+                    extensions.append(crypto.X509Extension(b('crlDistributionPoints'),
+                                                           False,
+                                                           b("URI:" + self.parent.crlDistributionPoints)))
+
+                authorityInfoAccess = []
+                if self.parent.ocspResponder:
+                    authorityInfoAccess.append("OCSP;URI:{}".format(self.parent.ocspResponder))
+
+                if self.parent.caIssuers:
+                    authorityInfoAccess.append("caIssuers;URI:{}".format(self.parent.caIssuers))
+
+                if len(authorityInfoAccess) > 0:
+                    authorityInfoAccess = bytes(",".join(authorityInfoAccess), 'utf-8')
+                    extensions.append(crypto.X509Extension(b('authorityInfoAccess'), False, authorityInfoAccess))
 
             subjectAltName = self.cacert.getAlternativeName()
             if subjectAltName:
@@ -221,6 +239,23 @@ class PyOpenSSLCertificateFactory(CertificateFactory):
                                  issuer=self.cacert.x509),
             crypto.X509Extension(b('keyUsage'), False, b('nonRepudiation, digitalSignature, keyEncipherment'))
         ]
+
+        if self.crlDistributionPoints:
+            extensions.append(crypto.X509Extension(b('crlDistributionPoints'),
+                                                   False,
+                                                   b("URI:" + self.crlDistributionPoints)))
+
+        authorityInfoAccess = []
+        if self.ocspResponder:
+            authorityInfoAccess.append("OCSP;URI:{}".format(self.ocspResponder))
+
+        if self.caIssuers:
+            authorityInfoAccess.append("caIssuers;URI:{}".format(self.caIssuers))
+
+        if len(authorityInfoAccess) > 0:
+            authorityInfoAccess = bytes(",".join(authorityInfoAccess), 'utf-8')
+            extensions.append(crypto.X509Extension(b('authorityInfoAccess'), False, authorityInfoAccess))
+
         subAltName = cert.getAlternativeName()
         if subAltName:
             extensions.append(crypto.X509Extension(b('subjectAltName'), False, b(subAltName)))

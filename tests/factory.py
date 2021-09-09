@@ -70,13 +70,14 @@ class TestFactory(unittest.TestCase):
             self.assertEqual(c.dn.emailAddress, "ea%s" % s)
 
             txt = c.toText()
-            self.assertTrue(txt.find("CN=cn%s" % s) > 0)
-            self.assertTrue(txt.find("OU=ou%s" % s) > 0)
-            self.assertTrue(txt.find("O=o%s" % s) > 0)
-            self.assertTrue(txt.find("L=l%s" % s) > 0)
-            self.assertTrue(txt.find("ST=st%s" % s) > 0)
-            self.assertTrue(txt.find("C=EN" if s == "k" else "C=FR") > 0)
-            self.assertTrue(txt.find("=ea%s" % s) > 0)
+            self.assertTrue(txt.find("CN=cn%s" % s) > 0 or txt.find("CN = cn%s" % s) > 0)
+            self.assertTrue(txt.find("OU=ou%s" % s) > 0 or txt.find("OU = ou%s" % s) > 0)
+            self.assertTrue(txt.find("O=o%s" % s) > 0 or txt.find("O = o%s" % s) > 0)
+            self.assertTrue(txt.find("L=l%s" % s) > 0 or txt.find("L = l%s" % s) > 0)
+            self.assertTrue(txt.find("ST=st%s" % s) > 0 or txt.find("ST = st%s" % s) > 0)
+            self.assertTrue(txt.find("C=EN" if s == "k" else "C=FR") > 0 or
+                            txt.find("C = EN" if s == "k" else "C = FR") > 0)
+            self.assertTrue(txt.find("=ea%s" % s) > 0 or txt.find("= ea%s" % s) > 0)
 
         factory.destroy()
 
@@ -102,6 +103,15 @@ class TestFactory(unittest.TestCase):
         self.assertTrue(txt.find("cert.zeroc.com") > 0)
         self.assertTrue(txt.find("cert@zeroc.com") > 0)
 
+        cert = factory.create("cert",
+                              cn="CERT",
+                              ip=["127.0.0.1", "127.0.0.2"],
+                              dns=["host1.cert.zeroc.com", "host2.cert.zeroc.com"])
+        txt = cert.toText()
+        self.assertTrue(txt.find("127.0.0.1") > 0)
+        self.assertTrue(txt.find("127.0.0.2") > 0)
+        self.assertTrue(txt.find("host1.cert.zeroc.com") > 0)
+        self.assertTrue(txt.find("host2.cert.zeroc.com") > 0)
         factory.destroy()
 
     def test_extendedKeyUsage(self):
@@ -177,6 +187,102 @@ class TestFactory(unittest.TestCase):
         f = vars(IceCertUtils)[self.factory](keyalg="dsa")
         s = f.getCA().toText()
         self.assertTrue(s.find("dsa") > 0 or s.find("DSA") > 0)
+
+    def test_crlDistributionPoints(self):
+        Factory = vars(IceCertUtils)[self.factory]
+        dn = IceCertUtils.DistinguishedName("CN")
+        factory = Factory(dn=dn,
+                          ip="127.0.0.1",
+                          dns="ca.zeroc.com",
+                          crlDistributionPoints="http://ca.zeroc.com/crl.pem")
+        cert = factory.create("cert", cn = "CERT", ip="127.0.0.1")
+
+        txt = factory.getCA().toText()
+        self.assertTrue(txt.find("CRL Sign") > 0 or txt.find("cRLSign"))
+        self.assertFalse(txt.find("X509v3 CRL Distribution Points") > 0 or
+                         txt.find("crlDistributionPoints") > 0 or
+                         txt.find("CRLDistributionPoints") > 0)
+        self.assertFalse(txt.find("http://ca.zeroc.com/crl.pem") > 0)
+
+        txt = cert.toText()
+        self.assertTrue(txt.find("X509v3 CRL Distribution Points") > 0 or
+                        txt.find("crlDistributionPoints") > 0 or
+                        txt.find("CRLDistributionPoints") > 0)
+        self.assertTrue(txt.find("http://ca.zeroc.com/crl.pem") > 0)
+
+        if self.factory != "KeyToolCertificateFactory":
+
+            ca2 = factory.createIntermediateFactory("ca2", crlDistributionPoints="http://ca2.zeroc.com/crl.pem")
+            cert = ca2.create("cert", cn = "CERT", ip="127.0.0.1")
+
+            txt = ca2.getCA().toText()
+            self.assertTrue(txt.find("CRL Sign") > 0)
+            self.assertTrue(txt.find("X509v3 CRL Distribution Points") > 0 or txt.find("crlDistributionPoints") > 0)
+            self.assertTrue(txt.find("http://ca.zeroc.com/crl.pem") > 0)
+
+            txt = cert.toText()
+            self.assertTrue(txt.find("X509v3 CRL Distribution Points") > 0 or txt.find("crlDistributionPoints") > 0)
+            self.assertTrue(txt.find("http://ca2.zeroc.com/crl.pem") > 0)
+
+            ca2 = factory.getIntermediateFactory("ca2")
+            cert = ca2.create("cert1", cn = "CERT", ip="127.0.0.1")
+            txt = cert.toText()
+            self.assertTrue(txt.find("X509v3 CRL Distribution Points") > 0 or txt.find("crlDistributionPoints") > 0)
+            self.assertTrue(txt.find("http://ca2.zeroc.com/crl.pem") > 0)
+
+        factory.destroy()
+
+    def test_authorityInfoAccess(self):
+        Factory = vars(IceCertUtils)[self.factory]
+        dn = IceCertUtils.DistinguishedName("CN")
+        factory = Factory(dn=dn,
+                          ip="127.0.0.1",
+                          dns="ca.zeroc.com",
+                          ocspResponder="http://ca.zeroc.com/ocsp",
+                          caIssuers="http://ca.zeroc.com/ca.pem")
+        cert = factory.create("cert", cn = "CERT", ip="127.0.0.1")
+
+        txt = factory.getCA().toText()
+        self.assertFalse(txt.find("Authority Information Access") > 0 or
+                         txt.find("authorityInfoAccess") > 0 or
+                         txt.find("AuthorityInfoAccess") > 0)
+        self.assertFalse(txt.find("http://ca.zeroc.com/ocsp") > 0)
+        self.assertFalse(txt.find("http://ca.zeroc.com/ca.pem") > 0)
+
+        txt = cert.toText()
+        self.assertTrue(txt.find("Authority Information Access") > 0 or
+                        txt.find("authorityInfoAccess") > 0 or
+                        txt.find("AuthorityInfoAccess") > 0)
+        self.assertTrue(txt.find("http://ca.zeroc.com/ocsp") > 0)
+        self.assertTrue(txt.find("http://ca.zeroc.com/ca.pem") > 0)
+
+        if self.factory != "KeyToolCertificateFactory":
+
+            ca2 = factory.createIntermediateFactory(
+                "ca2",
+                ocspResponder="http://ca2.zeroc.com/ocsp",
+                caIssuers="http://ca2.zeroc.com/ca2.pem")
+            cert = ca2.create("cert", cn = "CERT", ip="127.0.0.1")
+
+            txt = ca2.getCA().toText()
+            self.assertTrue(txt.find("Authority Information Access") or txt.find("authorityInfoAccess") > 0)
+            self.assertTrue(txt.find("http://ca.zeroc.com/ocsp") > 0)
+            self.assertTrue(txt.find("http://ca.zeroc.com/ca.pem") > 0)
+
+            txt = cert.toText()
+            self.assertTrue(txt.find("Authority Information Access") > 0 or txt.find("authorityInfoAccess") > 0)
+            self.assertTrue(txt.find("http://ca2.zeroc.com/ocsp") > 0)
+            self.assertTrue(txt.find("http://ca2.zeroc.com/ca2.pem") > 0)
+
+
+            ca2 = factory.getIntermediateFactory("ca2")
+            cert = ca2.create("cert1", cn = "CERT", ip="127.0.0.1")
+            txt = cert.toText()
+            self.assertTrue(txt.find("Authority Information Access") > 0 or txt.find("authorityInfoAccess") > 0)
+            self.assertTrue(txt.find("http://ca2.zeroc.com/ocsp") > 0)
+            self.assertTrue(txt.find("http://ca2.zeroc.com/ca2.pem") > 0)
+
+        factory.destroy()
 
 class PyOpenSSLTestFactory(TestFactory):
 

@@ -99,13 +99,27 @@ class KeyToolCertificateFactory(CertificateFactory):
             subAltName = cacert.getAlternativeName()
             issuerAltName = self.parent.cacert.getAlternativeName() if self.parent else None
             ext = "-ext bc:c" + \
+                  (" -ext ku=nonRepudiation,digitalSignature,keyEncipherment") +\
                   ((" -ext san=" + subAltName) if subAltName else "") + \
-                  ((" -ext ian=" + issuerAltName) if issuerAltName else "")\
+                  ((" -ext ian=" + issuerAltName) if issuerAltName else "") + \
                   ((" -ext eku=" + self.extendedKeyUsage) if  self.extendedKeyUsage else "")
 
             if not self.parent:
                 cacert.keyTool("genkeypair", ext, validity=self.validity, sigalg=self.sigalg)
             else:
+                if self.parent.crlDistributionPoints:
+                    ext += " -ext crl=URI:" + self.parent.crlDistributionPoints
+
+                aia = []
+                if self.parent.ocspResponder:
+                    aia.append("OCSP:URI:" + self.parent.ocspResponder)
+
+                if self.parent.caIssuers:
+                    aia.append("caIssuers:URI:" + self.parent.caIssuers)
+
+                if len(aia) > 0:
+                    ext += " -ext aia=" + ",".join(aia)
+
                 self.cacert = self.parent.cacert
                 cacert.keyTool("genkeypair")
                 pem = cacert.keyTool("gencert", ext, validity = self.validity, stdin=cacert.keyTool("certreq"))
@@ -146,6 +160,19 @@ class KeyToolCertificateFactory(CertificateFactory):
               ((" -ext san=" + subAltName) if subAltName else "") + \
               ((" -ext ian=" + issuerAltName) if issuerAltName else "") + \
               ((" -ext eku=" + extendedKeyUsage) if extendedKeyUsage else "")
+
+        if self.crlDistributionPoints:
+            ext += " -ext crl=URI:" + self.crlDistributionPoints
+
+        aia = []
+        if self.ocspResponder:
+            aia.append("OCSP:URI:" + self.ocspResponder)
+
+        if self.caIssuers:
+            aia.append("caIssuers:URI:" + self.caIssuers)
+
+        if len(aia) > 0:
+            ext += " -ext aia=" + ",".join(aia)
 
         # Sign the certificate with the CA
         if validity is None or validity > 0:
