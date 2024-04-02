@@ -85,22 +85,55 @@ X509v3 extensions:""" % (self.x509.get_version() + 1,
         return self
 
     def savePKCS12(self, path, password=None, chain=True, root=False, addkey=None):
+
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.backends import default_backend
+        from cryptography.hazmat.primitives.serialization import PrivateFormat, pkcs12, load_pem_private_key
+        from cryptography import x509
+
+
+        def convert_pyopenssl_x509_to_cryptography(x509_obj):
+            # Convert the PyOpenSSL X509 object to a PEM-encoded byte string, and load it into a
+            # cryptography Certificate object.
+            return x509.load_pem_x509_certificate(
+                crypto.dump_certificate(crypto.FILETYPE_PEM, x509_obj),
+                default_backend())
+
+        def convert_pyopenssl_pkey_to_cryptography(private_key_obj):
+            # Convert the PyOpenSSL PKey object to a PEM-encoded byte string, and load it into a
+            # cryptography private key object
+            return load_pem_private_key(
+                crypto.dump_privatekey(crypto.FILETYPE_PEM, private_key_obj),
+                password=None,
+                backend=default_backend())
+
         if addkey is None:
             addkey = self != self.parent.cacert
 
-        p12 = crypto.PKCS12()
-        p12.set_certificate(self.x509)
-        p12.set_friendlyname(b(self.alias))
-        if addkey:
-            p12.set_privatekey(self.pkey)
+        chain_certs = []
         if chain:
-            certs = []
             parent = self.parent
             while parent if root else parent.parent:
-                certs.append(parent.cacert.x509)
+                chain_certs.append(parent.cacert.x509)
                 parent = parent.parent
-            p12.set_ca_certificates(certs)
-        write(path, p12.export(b(password or "password")))
+
+        encryption_password = (password or "password").encode('utf-8')  # Correctly encode the password
+
+        # With OpenSSL 3.0.0+ the defaults for encryption when serializing PKCS12 have changed and some
+        # versions of Windows and macOS will not be able to read the new format.
+        encryption = (
+            PrivateFormat.PKCS12.encryption_builder().
+            key_cert_algorithm(pkcs12.PBES.PBESv1SHA1And3KeyTripleDESCBC).
+            hmac_hash(hashes.SHA1())).build(encryption_password)
+
+        pkcs12_data = pkcs12.serialize_key_and_certificates(
+            name = self.alias.encode('utf-8') if self.alias else None,
+            key=convert_pyopenssl_pkey_to_cryptography(self.pkey) if addkey else None,
+            cert=convert_pyopenssl_x509_to_cryptography(self.x509),
+            cas=[convert_pyopenssl_x509_to_cryptography(cert) for cert in chain_certs] if len(chain_certs) > 0 else None,
+            encryption_algorithm=encryption
+        )
+        write(path, pkcs12_data)
         return self
 
     def savePEM(self, path, chain=True, root=False):
