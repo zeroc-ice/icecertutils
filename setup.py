@@ -21,7 +21,7 @@ with open('README.rst') as file:
 setup(
   name = 'zeroc-icecertutils',
   packages = ['IceCertUtils'],
-  version = '1.0.5',
+  version = '1.1.0',
   description = 'ZeroC Ice certificate utilities',
   long_description = long_description,
   author = 'ZeroC, Inc.',
