@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "zeroc-icecertutils"
+version = "1.1.0"
+description = "ZeroC Ice certificate utilities"
+authors = ["ZeroC, Inc. <info@zeroc.com>"]
+license = "BSD"
+homepage = "https://github.com/zeroc-ice/icecertutils"
+repository = "https://github.com/zeroc-ice/icecertutils"
+keywords = ["ice", "certificate", "ca", "ssl"]
+readme = "README.md"
+
+packages = [
+    { include = "IceCertUtils" }
+]
+
+[tool.poetry.dependencies]
+python = "^3.11.0"
+pyopenssl = "^24.0.0"
+cryptography = "^43.0.0"
+
+
+[tool.poetry.scripts]
+iceca = "IceCertUtils.IceCaUtil:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
