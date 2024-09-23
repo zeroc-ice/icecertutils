@@ -3,7 +3,7 @@
 # Copyright (c) ZeroC, Inc. All rights reserved.
 #
 
-import os, random, tempfile, glob, datetime
+import os, random, glob, datetime
 
 from IceCertUtils.CertificateUtils import DistinguishedName, Certificate, CertificateFactory, b, d, read, write
 from OpenSSL import crypto
@@ -90,6 +90,7 @@ X509v3 extensions:""" % (self.x509.get_version() + 1,
         from cryptography.hazmat.backends import default_backend
         from cryptography.hazmat.primitives.serialization import PrivateFormat, pkcs12, load_pem_private_key
         from cryptography import x509
+        from cryptography.hazmat.primitives.serialization import NoEncryption
 
 
         def convert_pyopenssl_x509_to_cryptography(x509_obj):
@@ -117,14 +118,17 @@ X509v3 extensions:""" % (self.x509.get_version() + 1,
                 chain_certs.append(parent.cacert.x509)
                 parent = parent.parent
 
-        encryption_password = (password or "password").encode('utf-8')  # Correctly encode the password
 
-        # With OpenSSL 3.0.0+ the defaults for encryption when serializing PKCS12 have changed and some
-        # versions of Windows and macOS will not be able to read the new format.
-        encryption = (
-            PrivateFormat.PKCS12.encryption_builder().
-            key_cert_algorithm(pkcs12.PBES.PBESv1SHA1And3KeyTripleDESCBC).
-            hmac_hash(hashes.SHA1())).build(encryption_password)
+        if password:
+            encryption_password = password.encode('utf-8')  # Correctly encode the password
+            # With OpenSSL 3.0.0+ the defaults for encryption when serializing PKCS12 have changed and some
+            # versions of Windows and macOS will not be able to read the new format.
+            encryption = (
+                PrivateFormat.PKCS12.encryption_builder().
+                key_cert_algorithm(pkcs12.PBES.PBESv1SHA1And3KeyTripleDESCBC).
+                hmac_hash(hashes.SHA1())).build(encryption_password)
+        else:
+            encryption = NoEncryption()
 
         pkcs12_data = pkcs12.serialize_key_and_certificates(
             name = self.alias.encode('utf-8') if self.alias else None,

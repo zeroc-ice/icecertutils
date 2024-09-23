@@ -3,7 +3,7 @@
 # Copyright (c) ZeroC, Inc. All rights reserved.
 #
 
-import os, subprocess, glob, tempfile
+import os, glob, tempfile
 
 from IceCertUtils.CertificateUtils import DistinguishedName, Certificate, CertificateFactory, b, d, read, opensslSupport, write
 
