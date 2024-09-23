@@ -3,7 +3,7 @@
 # Copyright (c) ZeroC, Inc. All rights reserved.
 #
 
-import sys, os, shutil, subprocess, tempfile, random, re, atexit, json
+import sys, os, shutil, subprocess, tempfile, re, atexit, json
 
 try:
     from subprocess import DEVNULL
@@ -201,7 +201,7 @@ class Certificate:
 
         # Write password to safe temporary file
         (f, passpath) = tempfile.mkstemp()
-        os.write(f, b(password or "password"))
+        os.write(f, b(password or ""))
         os.close(f)
 
         try:
@@ -366,7 +366,7 @@ class CertificateFactory:
         self.factories = {}
 
         # The password used to protect keys and key stores from the factory home directory
-        self.password = password or parent.password if parent else "password"
+        self.password = password or parent.password if parent else ""
         if parent:
             self.passpath = parent.passpath
         else:

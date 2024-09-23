@@ -3,7 +3,7 @@
 # Copyright (c) ZeroC, Inc. All rights reserved.
 #
 
-import os, sys, getopt, tempfile, getpass, shutil, socket, uuid, IceCertUtils
+import os, sys, getopt, getpass, shutil, uuid, IceCertUtils
 
 def usage():
     print("usage: " + sys.argv[0] + " [--verbose --help --capass <pass>] init create list show export")

@@ -71,7 +71,7 @@ class OpenSSLCertificate(Certificate):
 
         key = "-inkey={0}".format(self.key) if addkey else "-nokeys"
         try:
-            self.openSSL("pkcs12", out=path, inkey=self.key, certfile=chainfile, password=password or "password")
+            self.openSSL("pkcs12", out=path, inkey=self.key, certfile=chainfile, password=password or "")
         finally:
             if chainfile:
                 os.remove(chainfile)
